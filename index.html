@@ -1,0 +1,1532 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Mars Explorer — NASA Mission Control</title>
+<meta name="description" content="Interactive NASA Mars Explorer: rover photos, weather, map, mission planner"/>
+
+<!-- Google Fonts -->
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet"/>
+
+<!-- Leaflet Map -->
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+<!-- Chart.js -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+
+<style>
+/* ===== RESET & TOKENS ===== */
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --red:#c1440e;--orange:#ff6b35;--dark:#08040200;
+  --bg:#0a0603;--panel:#110905;--surface:#180d08;
+  --blue:#4fc3f7;--purple:#ce93d8;--green:#a5d6a7;--yellow:#ffe082;
+  --gb:rgba(255,107,53,.05);--gb2:rgba(255,107,53,.10);
+  --border:rgba(255,107,53,.18);--border2:rgba(255,107,53,.35);
+  --t1:#f5e6d3;--t2:#b08060;--t3:#6b4a30;--ta:#ff6b35;
+  --sw:220px;--th:58px;
+  --ff:'Orbitron',monospace;--fb:'Inter',sans-serif;--fm:'JetBrains Mono',monospace;
+  --r:12px;--rs:8px;
+  --tr:.18s ease;--trm:.3s cubic-bezier(.4,0,.2,1);
+}
+html{font-size:14px}
+body{background:var(--bg);color:var(--t1);font-family:var(--fb);height:100vh;overflow:hidden;
+  background-image:radial-gradient(ellipse at 15% 50%,rgba(193,68,14,.07) 0%,transparent 55%),
+  radial-gradient(ellipse at 85% 15%,rgba(79,195,247,.04) 0%,transparent 50%)}
+button{font-family:var(--fb);cursor:pointer;border:none;outline:none}
+input,select{font-family:var(--fb);outline:none}
+.hidden{display:none!important}
+::-webkit-scrollbar{width:4px;height:4px}
+::-webkit-scrollbar-thumb{background:rgba(255,107,53,.3);border-radius:10px}
+
+/* ===== LOADING ===== */
+#ls{position:fixed;inset:0;background:var(--bg);display:flex;align-items:center;justify-content:center;z-index:9999}
+.lc{text-align:center;display:flex;flex-direction:column;align-items:center;gap:14px}
+.ll svg{animation:spin 3s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.lt{font-family:var(--ff);font-size:2rem;font-weight:900;color:var(--orange);letter-spacing:.3em;text-shadow:0 0 30px rgba(255,107,53,.5)}
+.ls2{font-size:.7rem;color:var(--t3);letter-spacing:.5em;text-transform:uppercase}
+.lbc{width:220px;height:3px;background:rgba(255,107,53,.1);border-radius:10px;overflow:hidden}
+.lb{height:100%;background:linear-gradient(90deg,var(--red),var(--orange));border-radius:10px;
+  animation:lp 3.5s ease forwards;box-shadow:0 0 10px var(--orange)}
+@keyframes lp{0%{width:0}20%{width:20%}50%{width:60%}80%{width:85%}100%{width:100%}}
+.lst{font-size:.68rem;color:var(--t3);font-family:var(--fm);letter-spacing:.08em}
+
+/* ===== APP LAYOUT ===== */
+#app{display:flex;height:100vh;width:100vw;overflow:hidden}
+
+/* ===== SIDEBAR ===== */
+.sb{width:var(--sw);min-width:var(--sw);height:100vh;background:linear-gradient(180deg,#0d0804,#080503);
+  border-right:1px solid var(--border);display:flex;flex-direction:column;
+  transition:width var(--trm),min-width var(--trm);z-index:100;overflow:hidden}
+.sb.col{width:68px;min-width:68px}
+.sbh{display:flex;align-items:center;justify-content:space-between;padding:14px 10px;
+  border-bottom:1px solid var(--border);min-height:68px}
+.sbl{display:flex;align-items:center;gap:10px;overflow:hidden;flex:1}
+.sbl-t{font-family:var(--ff);font-size:.95rem;font-weight:900;color:var(--orange);letter-spacing:.12em;white-space:nowrap}
+.sbl-s{font-size:.52rem;color:var(--t3);letter-spacing:.25em;white-space:nowrap}
+.sb-tog{background:transparent;color:var(--t2);font-size:1.1rem;padding:4px 8px;border-radius:6px;transition:all var(--tr)}
+.sb-tog:hover{color:var(--orange);background:var(--gb2)}
+.sbn{flex:1;display:flex;flex-direction:column;padding:10px 7px;gap:3px;overflow-y:auto}
+.nb{display:flex;align-items:center;gap:11px;padding:9px 11px;border-radius:var(--rs);
+  background:transparent;color:var(--t2);font-size:.78rem;font-weight:500;
+  transition:all var(--tr);white-space:nowrap;position:relative;overflow:hidden}
+.nb::before{content:'';position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--orange);
+  border-radius:0 3px 3px 0;transform:scaleY(0);transition:transform var(--trm)}
+.nb:hover{background:var(--gb2);color:var(--t1)}
+.nb.act{background:rgba(255,107,53,.13);color:var(--orange)}
+.nb.act::before{transform:scaleY(1)}
+.ni{font-size:1.05rem;flex-shrink:0}
+.nl{transition:opacity var(--trm),width var(--trm)}
+.sb.col .nl,.sb.col .sbl-t,.sb.col .sbl-s{opacity:0;width:0;overflow:hidden}
+.sbs{display:flex;align-items:center;gap:9px;padding:12px 14px;border-top:1px solid var(--border);min-height:50px}
+.sd{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.sd.on{background:#4ade80;box-shadow:0 0 8px #4ade80;animation:pg 2s ease infinite}
+@keyframes pg{0%,100%{box-shadow:0 0 8px #4ade80}50%{box-shadow:0 0 16px #4ade80,0 0 28px rgba(74,222,128,.3)}}
+.sbs-l{font-size:.58rem;color:var(--t3);letter-spacing:.1em;display:block}
+.sbs-v{font-size:.7rem;color:#4ade80;font-family:var(--fm)}
+
+/* ===== MAIN CONTENT ===== */
+.mc{flex:1;display:flex;flex-direction:column;overflow:hidden;min-width:0}
+
+/* ===== TOPBAR ===== */
+.tb{height:var(--th);background:rgba(8,4,2,.97);border-bottom:1px solid var(--border);
+  display:flex;align-items:center;justify-content:space-between;padding:0 18px;gap:14px;flex-shrink:0}
+.tbl,.tbr{display:flex;align-items:center;gap:14px;flex:1}
+.tbr{justify-content:flex-end}
+.tbc{flex:0 0 auto}
+.sc-blk{display:flex;flex-direction:column;align-items:flex-start}
+.sc-l{font-size:.52rem;color:var(--t3);letter-spacing:.15em;font-family:var(--ff)}
+.sc-v{font-family:var(--ff);font-size:.95rem;color:var(--orange);font-weight:700}
+.mt-v{font-family:var(--fm);font-size:.75rem;color:var(--t2)}
+.tbdiv{width:1px;height:28px;background:var(--border)}
+.pt{font-family:var(--ff);font-size:.72rem;color:var(--t2);letter-spacing:.22em;font-weight:500}
+.cb{display:flex;align-items:center;gap:5px;padding:4px 9px;background:var(--gb);border:1px solid var(--border);border-radius:20px;font-size:.73rem}
+.cb span{font-family:var(--fm);color:var(--t2)}
+.ab{padding:4px 10px;background:rgba(255,68,68,.1);border:1px solid rgba(255,68,68,.3);border-radius:20px;
+  color:#ff8080;font-size:.73rem;cursor:pointer;display:flex;align-items:center;gap:4px}
+
+/* ===== PANELS ===== */
+.panel{display:none;flex:1;overflow:hidden}
+.panel.act{display:flex;flex-direction:column}
+.pi{flex:1;overflow-y:auto;padding:18px;display:flex;flex-direction:column;gap:14px}
+
+/* ===== GLASS ===== */
+.gp{background:var(--gb);border:1px solid var(--border);border-radius:var(--r);backdrop-filter:blur(10px)}
+.pst{font-family:var(--ff);font-size:.62rem;color:var(--t2);letter-spacing:.18em;margin-bottom:12px;
+  padding-bottom:9px;border-bottom:1px solid var(--border)}
+
+/* ===== MAP ===== */
+.map-wrap{flex:1;position:relative;overflow:hidden}
+#map{width:100%;height:100%;min-height:calc(100vh - var(--th))}
+.leaflet-container{background:#060200!important;font-family:var(--fb)}
+.leaflet-popup-content-wrapper{background:rgba(8,4,2,.97)!important;border:1px solid var(--border)!important;
+  color:var(--t1)!important;border-radius:var(--r)!important;box-shadow:0 8px 32px rgba(0,0,0,.7)!important}
+.leaflet-popup-tip{background:rgba(8,4,2,.97)!important}
+.leaflet-popup-content{margin:12px 15px!important}
+.pu-t{font-family:var(--ff);font-size:.72rem;color:var(--orange);letter-spacing:.08em;margin-bottom:6px}
+.pu-i{font-size:.72rem;color:var(--t2);line-height:1.6}
+.pu-i span{color:var(--t1)}
+.mc-pnl{position:absolute;top:14px;left:14px;z-index:400;padding:13px;min-width:165px;display:flex;flex-direction:column;gap:7px}
+.ctt{font-family:var(--ff);font-size:.58rem;color:var(--t2);letter-spacing:.18em;margin-bottom:3px}
+.lt-tog{display:flex;align-items:center;gap:9px;font-size:.73rem;color:var(--t2);cursor:pointer;user-select:none;transition:color var(--tr)}
+.lt-tog:hover{color:var(--t1)}
+.lt-tog input{display:none}
+.trk{width:28px;height:15px;background:rgba(255,107,53,.08);border:1px solid var(--border);border-radius:10px;flex-shrink:0;position:relative;transition:background var(--tr)}
+.trk::after{content:'';position:absolute;top:2px;left:2px;width:9px;height:9px;border-radius:50%;background:var(--t3);transition:transform var(--trm),background var(--tr)}
+.lt-tog input:checked+.trk{background:rgba(255,107,53,.22);border-color:var(--orange)}
+.lt-tog input:checked+.trk::after{transform:translateX(13px);background:var(--orange)}
+.cdiv{height:1px;background:var(--border);margin:3px 0}
+.cbtn{padding:6px 11px;background:rgba(255,107,53,.1);border:1px solid rgba(255,107,53,.28);border-radius:var(--rs);
+  color:var(--orange);font-size:.7rem;transition:all var(--tr);text-align:center}
+.cbtn:hover{background:rgba(255,107,53,.2);transform:translateY(-1px)}
+.cbtn.dng{color:#ff8080;border-color:rgba(255,80,80,.3);background:rgba(255,80,80,.07)}
+.cbtn.dng:hover{background:rgba(255,80,80,.14)}
+.ml{position:absolute;bottom:18px;right:14px;z-index:400;padding:11px 13px;min-width:148px}
+.leg-t{font-family:var(--ff);font-size:.58rem;color:var(--t3);letter-spacing:.18em;margin-bottom:9px}
+.leg-i{display:flex;align-items:center;gap:7px;font-size:.7rem;color:var(--t2);margin-bottom:5px}
+.leg-d{width:9px;height:9px;border-radius:50%;flex-shrink:0;box-shadow:0 0 5px currentColor}
+.rs-pnl{position:absolute;top:14px;right:14px;z-index:400;padding:13px;min-width:165px}
+.rs-t{font-family:var(--ff);font-size:.58rem;color:var(--t3);letter-spacing:.18em;margin-bottom:9px}
+.rs-i{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;font-size:.7rem}
+.rs-l{color:var(--t2)} .rs-v{color:var(--orange);font-family:var(--fm);font-weight:500}
+
+/* ===== WEATHER ===== */
+.wh-hero{padding:22px;background:linear-gradient(135deg,rgba(255,107,53,.07),rgba(79,195,247,.03))}
+.wm{display:flex;align-items:center;gap:22px;margin-bottom:18px;flex-wrap:wrap}
+.wloc{display:flex;align-items:center;gap:11px;flex:1}
+.wli{font-size:1.8rem}
+.wln{font-family:var(--ff);font-size:.75rem;color:var(--t1);letter-spacing:.08em}
+.wll{font-size:.65rem;color:var(--t2);margin-top:2px}
+.w-tmp{font-family:var(--ff);font-size:2.8rem;font-weight:900;color:var(--orange);text-shadow:0 0 25px rgba(255,107,53,.35);flex-shrink:0}
+.w-cond{font-size:.75rem;color:var(--t2);flex:1;min-width:110px}
+.w-sr{display:grid;grid-template-columns:repeat(6,1fr);gap:10px}
+.ws{display:flex;flex-direction:column;align-items:center;gap:3px;padding:9px;
+  background:rgba(255,255,255,.02);border-radius:var(--rs);border:1px solid rgba(255,255,255,.04);text-align:center}
+.wi{font-size:1.1rem}.wsl{font-size:.57rem;color:var(--t3);letter-spacing:.05em}.wsv{font-family:var(--fm);font-size:.75rem;color:var(--t1);font-weight:500}
+.wgrid{display:grid;grid-template-columns:1fr 230px;gap:14px;flex:1}
+.w-hist{padding:14px;grid-row:1/3}
+.wrose{padding:14px;display:flex;flex-direction:column;align-items:center}
+.w-eva{padding:14px}
+.sh{display:flex;flex-direction:column;gap:7px}
+.sc{display:grid;grid-template-columns:60px repeat(4,1fr);gap:7px;align-items:center;
+  padding:9px 11px;background:rgba(255,255,255,.02);border-radius:var(--rs);border:1px solid rgba(255,255,255,.03);transition:all var(--tr)}
+.sc:hover{background:rgba(255,107,53,.05);border-color:rgba(255,107,53,.1)}
+.sn{font-family:var(--ff);font-size:.62rem;color:var(--orange);font-weight:700;letter-spacing:.04em}
+.sd2{display:flex;flex-direction:column;align-items:center;gap:2px}
+.sl{font-size:.53rem;color:var(--t3);letter-spacing:.08em;text-transform:uppercase}
+.sv{font-family:var(--fm);font-size:.72rem;color:var(--t2)}
+.sv.hl{color:var(--blue)}
+.eva-i{display:flex;flex-direction:column;gap:7px}
+.ei{display:flex;align-items:center;gap:9px;font-size:.73rem;color:var(--t2);padding:7px 9px;border-radius:var(--rs);background:rgba(255,255,255,.02)}
+.eds{width:7px;height:7px;border-radius:50%;flex-shrink:0}
+.ei.safe .eds{background:#4ade80;box-shadow:0 0 5px #4ade80}
+.ei.warn .eds{background:#facc15;box-shadow:0 0 5px #facc15}
+.ei.dng .eds{background:#f87171;box-shadow:0 0 5px #f87171}
+
+/* ===== GALLERY ===== */
+.gc{padding:14px;display:flex;align-items:flex-end;gap:12px;flex-wrap:wrap;flex-shrink:0}
+.gg{display:flex;flex-direction:column;gap:5px}
+.gg label{font-family:var(--ff);font-size:.58rem;color:var(--t3);letter-spacing:.12em}
+.gg select,.gg input{background:rgba(255,107,53,.06);border:1px solid var(--border);border-radius:var(--rs);
+  color:var(--t1);padding:7px 10px;font-size:.78rem;transition:border-color var(--tr);min-width:138px}
+.gg select:focus,.gg input:focus{border-color:var(--orange)}
+.gg select option{background:#1a0e08}
+.fb{padding:8px 18px;background:linear-gradient(135deg,var(--red),var(--orange));border-radius:var(--rs);
+  color:#fff;font-size:.76rem;font-weight:600;letter-spacing:.07em;box-shadow:0 4px 15px rgba(255,107,53,.3);
+  white-space:nowrap;transition:all var(--tr)}
+.fb:hover{transform:translateY(-2px);box-shadow:0 6px 22px rgba(255,107,53,.5)}
+.fb.sec{background:rgba(255,107,53,.1);border:1px solid rgba(255,107,53,.28);color:var(--orange);box-shadow:none}
+.fb.sec:hover{background:rgba(255,107,53,.2)}
+.gm{display:flex;align-items:center;gap:9px;font-size:.75rem;color:var(--t2);padding:0 2px;flex-shrink:0}
+.gm-sep{color:var(--t3)}
+.gm-r{font-family:var(--ff);color:var(--orange);font-size:.68rem;letter-spacing:.08em}
+.pg{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:10px;overflow-y:auto;flex:1;align-content:start}
+.gph{grid-column:1/-1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:11px;min-height:280px;color:var(--t2)}
+.gph-ic{font-size:2.8rem;opacity:.45}
+.gph-t{font-size:.85rem;text-align:center}
+.gph-s{font-size:.72rem;color:var(--t3);text-align:center}
+.pc{position:relative;border-radius:var(--r);overflow:hidden;cursor:pointer;aspect-ratio:1;
+  background:#0d0804;border:1px solid var(--border);transition:all var(--trm);animation:fiu .4s ease both}
+@keyframes fiu{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:translateY(0)}}
+.pc:hover{transform:scale(1.04) translateY(-3px);border-color:rgba(255,107,53,.45);box-shadow:0 8px 24px rgba(0,0,0,.5),0 0 20px rgba(255,107,53,.1)}
+.pc img{width:100%;height:100%;object-fit:cover;display:block}
+.po{position:absolute;bottom:0;left:0;right:0;background:linear-gradient(to top,rgba(0,0,0,.92),transparent);
+  padding:18px 9px 7px;transform:translateY(100%);transition:transform var(--trm)}
+.pc:hover .po{transform:translateY(0)}
+.po-cam{font-family:var(--ff);font-size:.58rem;color:var(--orange);letter-spacing:.08em}
+.po-sol{font-size:.62rem;color:var(--t2);margin-top:2px}
+
+/* ===== MISSION ===== */
+.mg{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.m-inf,.m-rv,.m-wp,.m-sci{padding:14px}
+.m-rv{grid-column:1/3}
+.ms{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}
+.ms-i{display:flex;flex-direction:column;gap:4px;padding:11px;background:rgba(255,255,255,.02);border-radius:var(--rs);border:1px solid rgba(255,255,255,.04)}
+.ms-l{font-size:.62rem;color:var(--t3);letter-spacing:.04em}
+.ms-v{font-family:var(--fm);font-size:.88rem;color:var(--t1);font-weight:500}
+.rcs{display:grid;grid-template-columns:repeat(2,1fr);gap:12px}
+.rc{background:rgba(255,255,255,.02);border:1px solid var(--border);border-radius:var(--r);padding:13px;transition:all var(--trm)}
+.rc:hover{background:rgba(255,107,53,.04);transform:translateY(-2px)}
+.rch{display:flex;align-items:center;gap:9px;margin-bottom:11px;padding-left:9px}
+.rci{font-size:1.4rem}
+.rcn{font-family:var(--ff);font-size:.72rem;color:var(--t1);letter-spacing:.07em}
+.rcl{font-size:.62rem;color:var(--t2);margin-top:2px}
+.rcs2{font-family:var(--ff);font-size:.53rem;padding:3px 7px;border-radius:20px;margin-left:auto;letter-spacing:.08em}
+.rcs2.act{background:rgba(74,222,128,.13);color:#4ade80;border:1px solid rgba(74,222,128,.28)}
+.rcs2.con{background:rgba(156,163,175,.08);color:#9ca3af;border:1px solid rgba(156,163,175,.18)}
+.rci2{margin-bottom:11px}
+.ri{display:flex;justify-content:space-between;font-size:.7rem;color:var(--t2);padding:3px 0;border-bottom:1px solid rgba(255,255,255,.03)}
+.ri span:last-child{color:var(--t1);font-family:var(--fm)}
+.rcbtn{width:100%;padding:6px;background:rgba(255,107,53,.1);border:1px solid rgba(255,107,53,.23);border-radius:var(--rs);color:var(--orange);font-size:.7rem;transition:all var(--tr)}
+.rcbtn:hover{background:rgba(255,107,53,.2)}
+.wl-l{max-height:190px;overflow-y:auto}
+.wp-e{font-size:.72rem;color:var(--t3);text-align:center;padding:18px;line-height:1.6}
+.wp-i{display:flex;align-items:center;gap:7px;padding:7px 9px;background:rgba(255,255,255,.02);border-radius:var(--rs);margin-bottom:5px;font-size:.72rem;color:var(--t2)}
+.wn{width:19px;height:19px;border-radius:50%;background:rgba(255,68,68,.18);border:1px solid rgba(255,68,68,.38);
+  color:#ff8080;font-size:.62rem;display:flex;align-items:center;justify-content:center;font-family:var(--fm);flex-shrink:0}
+.wco{font-family:var(--fm);font-size:.68rem;color:var(--t1)}
+.wa{display:flex;gap:7px;margin-top:11px}
+.scl{display:flex;flex-direction:column;gap:5px;margin-bottom:12px;max-height:210px;overflow-y:auto}
+.sci-i{display:flex;align-items:center;gap:9px;font-size:.73rem;color:var(--t2);cursor:pointer;
+  padding:6px 9px;border-radius:var(--rs);transition:all var(--tr);user-select:none}
+.sci-i:hover{background:rgba(255,107,53,.05);color:var(--t1)}
+.sci-i input{accent-color:var(--orange);width:13px;height:13px}
+.scp{display:flex;align-items:center;gap:9px}
+.scpb{flex:1;height:4px;background:rgba(255,255,255,.05);border-radius:10px;overflow:hidden}
+.scpf{height:100%;background:linear-gradient(90deg,var(--red),var(--orange));border-radius:10px;transition:width var(--trm);box-shadow:0 0 8px rgba(255,107,53,.35);width:12.5%}
+.scpt{font-size:.68rem;color:var(--t3);font-family:var(--fm);white-space:nowrap}
+
+/* ===== APOD ===== */
+.apc{display:flex;flex-direction:column;gap:14px;height:100%}
+.apct{padding:14px;display:flex;align-items:flex-end;gap:12px;flex-wrap:wrap;flex-shrink:0}
+.apd{flex:1;border-radius:var(--r);border:1px solid var(--border);overflow:hidden;min-height:380px;display:flex}
+.apc2{display:flex;width:100%;gap:22px;padding:22px;background:rgba(0,0,0,.3);overflow-y:auto;align-items:flex-start}
+.apim{flex:0 0 55%;border-radius:var(--r);overflow:hidden}
+.apim img{width:100%;height:auto;display:block;border-radius:var(--r);cursor:zoom-in}
+.apin{flex:1;display:flex;flex-direction:column;gap:12px}
+.apdb{font-family:var(--fm);font-size:.68rem;color:var(--orange);background:rgba(255,107,53,.1);
+  border:1px solid rgba(255,107,53,.2);padding:4px 10px;border-radius:20px;display:inline-block}
+.aptr{font-family:var(--ff);font-size:1rem;color:var(--t1);line-height:1.4;letter-spacing:.04em}
+.apcp{font-size:.68rem;color:var(--t3)}
+.apex{font-size:.77rem;color:var(--t2);line-height:1.8;max-height:320px;overflow-y:auto}
+
+/* ===== TELEMETRY ===== */
+.tg{display:grid;grid-template-columns:repeat(2,1fr);gap:14px}
+.tc-p{padding:14px}
+.ts{padding:14px;grid-column:1/3}
+.tf{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+.tfi{display:flex;flex-direction:column;gap:4px;padding:11px;background:rgba(255,255,255,.02);border-radius:var(--rs);border:1px solid rgba(255,255,255,.04)}
+.tfl{font-size:.58rem;color:var(--t3);letter-spacing:.04em}
+.tfv{font-family:var(--fm);font-size:.8rem;color:var(--t1);font-weight:500}
+
+/* ===== LIGHTBOX ===== */
+.lbx{position:fixed;inset:0;background:rgba(0,0,0,.93);z-index:1000;display:flex;align-items:center;justify-content:center;animation:fi .28s ease;backdrop-filter:blur(10px)}
+@keyframes fi{from{opacity:0}to{opacity:1}}
+.lbx-cl{position:absolute;top:18px;right:22px;background:rgba(255,255,255,.1);color:#fff;font-size:1.1rem;width:38px;height:38px;border-radius:50%;display:flex;align-items:center;justify-content:center;transition:all var(--tr)}
+.lbx-cl:hover{background:rgba(255,255,255,.2);transform:scale(1.1)}
+.lbx-ct{max-width:90vw;max-height:90vh;display:flex;flex-direction:column;align-items:center;gap:14px}
+#lbx-img{max-width:100%;max-height:75vh;border-radius:var(--r);object-fit:contain;border:1px solid var(--border)}
+.lbx-inf{font-size:.77rem;color:var(--t2);text-align:center;max-width:580px;line-height:1.6}
+
+/* ===== MODAL ===== */
+.mo{position:fixed;inset:0;background:rgba(0,0,0,.78);z-index:800;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(5px);animation:fi .28s ease}
+.mo-b{min-width:480px;max-width:620px;max-height:78vh;overflow-y:auto;padding:22px;position:relative}
+.mo-cl{position:absolute;top:14px;right:14px;background:rgba(255,255,255,.07);color:var(--t2);width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:.85rem;transition:all var(--tr)}
+.mo-cl:hover{background:rgba(255,255,255,.14);color:var(--t1)}
+.mo-t{font-family:var(--ff);font-size:.85rem;color:var(--orange);letter-spacing:.14em;margin-bottom:14px;padding-right:34px}
+.mst{display:flex;justify-content:space-between;font-size:.76rem;color:var(--t2);padding:7px 9px;background:rgba(255,255,255,.02);border-radius:var(--rs);margin-bottom:5px}
+.mst span:last-child{font-family:var(--fm);color:var(--t1)}
+
+/* ===== SPINNER ===== */
+.spin{width:34px;height:34px;border:3px solid rgba(255,107,53,.1);border-top-color:var(--orange);border-radius:50%;animation:sp .8s linear infinite;margin:18px auto}
+@keyframes sp{to{transform:rotate(360deg)}}
+
+/* ===== RESPONSIVE ===== */
+@media(max-width:1024px){.w-sr{grid-template-columns:repeat(3,1fr)}.rcs{grid-template-columns:1fr}.tf{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:768px){.sb{width:68px;min-width:68px}.nl,.sbl-t,.sbl-s{opacity:0;width:0;overflow:hidden}.wgrid{grid-template-columns:1fr}.mg{grid-template-columns:1fr}.m-rv{grid-column:1}.ts{grid-column:1}.tg{grid-template-columns:1fr}.apc2{flex-direction:column}}
+
+/* ===== STARFIELD ===== */
+body::after{content:'';position:fixed;inset:0;
+  background-image:radial-gradient(1px 1px at 8% 12%,rgba(255,255,255,.35) 0%,transparent 100%),
+  radial-gradient(1px 1px at 23% 68%,rgba(255,255,255,.22) 0%,transparent 100%),
+  radial-gradient(1px 1px at 42% 28%,rgba(255,255,255,.4) 0%,transparent 100%),
+  radial-gradient(1px 1px at 58% 82%,rgba(255,255,255,.18) 0%,transparent 100%),
+  radial-gradient(1px 1px at 73% 8%,rgba(255,255,255,.32) 0%,transparent 100%),
+  radial-gradient(1px 1px at 88% 52%,rgba(255,255,255,.25) 0%,transparent 100%),
+  radial-gradient(1px 1px at 95% 35%,rgba(255,255,255,.2) 0%,transparent 100%),
+  radial-gradient(1px 1px at 15% 90%,rgba(255,255,255,.15) 0%,transparent 100%),
+  radial-gradient(1px 1px at 65% 45%,rgba(255,255,255,.28) 0%,transparent 100%);
+  pointer-events:none;z-index:-1}
+
+/* ===== WARM LIGHT GLASS THEME ===== */
+:root{
+  --red:#a84b2a;--orange:#c96945;--bg:#f4f3ef;--panel:rgba(255,255,255,.72);
+  --surface:rgba(255,255,255,.82);--blue:#447b91;--purple:#846c96;--green:#4e8066;
+  --yellow:#a97822;--gb:rgba(255,255,255,.62);--gb2:rgba(255,255,255,.88);
+  --border:rgba(91,83,70,.14);--border2:rgba(169,91,61,.25);
+  --t1:#303631;--t2:#626a63;--t3:#858b84;--ta:#a94f32;
+  --ff:'Inter',sans-serif;--fb:'Inter',sans-serif;--fm:'Inter',sans-serif;
+}
+body{
+  background:#f4f3ef;color:var(--t1);
+  background-image:radial-gradient(ellipse at 12% 8%,rgba(241,194,163,.38),transparent 40%),
+    radial-gradient(ellipse at 90% 82%,rgba(194,216,218,.36),transparent 42%),
+    linear-gradient(135deg,#f8f6f1,#edf1ef);
+}
+body,body *{font-family:'Inter',sans-serif!important;letter-spacing:normal!important}
+body::after{display:none}
+#ls{background:linear-gradient(135deg,#f8f6f1,#edf1ef)}
+.lt{color:var(--ta);text-shadow:none;font-weight:700}
+.ls2,.lst{color:var(--t2)}
+.lb{background:linear-gradient(90deg,#d58b68,#8faeb0);box-shadow:none}
+.lbc{background:rgba(91,83,70,.1)}
+.sb,.tb,.sbh,.sbs{
+  background:rgba(255,255,255,.68);border-color:var(--border);
+  backdrop-filter:blur(22px);-webkit-backdrop-filter:blur(22px);
+}
+.sb{box-shadow:8px 0 32px rgba(55,61,55,.045)}
+.sbl-t,.sc-v,.pt,.ctt,.rs-t,.leg-t,.pst{color:var(--ta)}
+.sbl-t{font-weight:700}
+.sc-v{font-size:.95rem;font-weight:650}
+.nb{color:var(--t2);border-radius:12px}
+.nb:hover{background:rgba(196,105,69,.08);color:var(--t1)}
+.nb.act{background:rgba(196,105,69,.12);color:var(--ta)}
+.nb::before{background:var(--ta)}
+.sbs-l,.sc-l,.gg label,.wsl,.sl,.tfl,.ms-l,.apcp{color:var(--t3)}
+.sbs-v{color:#4e8066}
+.sd.warm{background:#d39a43;box-shadow:0 0 8px rgba(211,154,67,.28);animation:none}
+.sd.offline{background:#b85f50;box-shadow:none;animation:none}
+.sbs-v.warm{color:#98702d}
+.sbs-v.offline{color:#a95549}
+.tb{border-bottom:1px solid var(--border)}
+.cb,.ab,.gp,.mc-pnl,.ml,.rs-pnl,.rc,.ms-i,.ei,.wp-i,.tfi,.sc,.mst{
+  background:rgba(255,255,255,.58);border:1px solid var(--border);
+  box-shadow:0 8px 28px rgba(55,61,55,.045);
+}
+.gp,.mc-pnl,.ml,.rs-pnl,.apd{
+  backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);
+  border-radius:18px;border-color:var(--border);
+}
+.panel{background:transparent}
+.pi{scrollbar-color:rgba(169,91,61,.28) transparent}
+.mc-pnl,.ml,.rs-pnl{background:rgba(255,255,255,.8)}
+.map-wrap{background:#e8e4da}
+#map,.leaflet-container{background:#e8e4da!important}
+.leaflet-control-zoom a,.leaflet-popup-content-wrapper,.leaflet-popup-tip{
+  background:rgba(255,255,255,.94)!important;color:var(--t1)!important;
+}
+.leaflet-popup-content-wrapper{border:1px solid var(--border)!important;box-shadow:0 10px 32px rgba(40,45,40,.14)!important}
+.leaflet-popup-content{color:var(--t1)}
+.pu-t,.popup-title{color:var(--ta)!important}
+.pu-i,.popup-info{color:var(--t2)!important}
+.cbtn,.rcbtn{
+  background:rgba(255,255,255,.74);border:1px solid var(--border);
+  border-radius:11px;color:var(--t1);transition:all .2s ease;
+}
+.cbtn:hover,.rcbtn:hover{background:#fff;border-color:var(--border2);transform:translateY(-1px)}
+.cbtn.dng{color:#a8574b}
+.gg input,.gg select{
+  color:var(--t1);background:rgba(255,255,255,.76);border:1px solid var(--border);
+  border-radius:11px;color-scheme:light;
+}
+.gg select option{background:#fff;color:var(--t1)}
+.gg input:focus,.gg select:focus{border-color:var(--ta);box-shadow:0 0 0 3px rgba(196,105,69,.1)}
+.fb{
+  background:linear-gradient(135deg,#b65c3b,#d68d68);border-radius:12px;
+  box-shadow:0 7px 18px rgba(169,91,61,.16);font-weight:600;
+}
+.fb:hover{box-shadow:0 9px 22px rgba(169,91,61,.22)}
+.fb.sec{background:rgba(255,255,255,.76);border:1px solid var(--border);color:var(--ta);box-shadow:none}
+.fb.sec:hover{background:#fff}
+.apd{background:rgba(255,255,255,.54);box-shadow:0 12px 36px rgba(55,61,55,.06)}
+.apc2{background:rgba(255,255,255,.72);gap:28px;padding:clamp(18px,3vw,36px)}
+.apim img{max-height:68vh;object-fit:contain;background:rgba(45,50,45,.035)}
+.apin{padding:8px 4px}
+.apdb{background:rgba(196,105,69,.09);border-color:rgba(196,105,69,.18);color:var(--ta)}
+.aptr{color:var(--t1);font-size:clamp(1.15rem,1.7vw,1.55rem);font-weight:600}
+.apex{color:var(--t2);font-size:.9rem;line-height:1.75}
+.gph{color:var(--t2)}
+.gph-s{color:var(--t3)}
+.pc{background:rgba(255,255,255,.76);border-color:var(--border);border-radius:16px}
+.pc:hover{border-color:var(--border2);box-shadow:0 10px 28px rgba(55,61,55,.12)}
+.ms-i,.tfi,.ei,.wp-i,.sc{border-radius:12px;color:var(--t2)}
+.rc{border-radius:16px}
+.rc:hover,.sc:hover{background:rgba(255,255,255,.9);border-color:var(--border2)}
+.rcn,.ms-v,.tfv,.ri span:last-child,.wco{color:var(--t1)}
+.ri{border-color:rgba(91,83,70,.1)}
+.apdb,.gm-r,.sn,.apcp,.aptr,.pu-t,.popup-title{font-family:'Inter',sans-serif}
+.apc2 a{color:var(--ta)!important}
+.spin{border-color:rgba(91,83,70,.14);border-top-color:var(--ta)}
+::-webkit-scrollbar-thumb{background:rgba(130,123,110,.3)}
+@media(max-width:768px){
+  .apc2{flex-direction:column}
+  .apim{width:100%;flex:auto}
+  .apim img{max-height:52vh}
+}
+
+/* ===== MARS ATELIER · FROSTED GLASS SYSTEM ===== */
+:root{
+  --bg:#f1eee8;--panel:rgba(255,255,255,.62);--surface:rgba(255,255,255,.76);
+  --red:#9c4a31;--orange:#bd6848;--ta:#a65538;--blue:#638c98;
+  --purple:#89759d;--green:#52806a;--yellow:#a9803e;
+  --gb:rgba(255,255,255,.54);--gb2:rgba(255,255,255,.78);
+  --border:rgba(96,81,66,.13);--border2:rgba(166,93,64,.28);
+  --t1:#2e3735;--t2:#606d68;--t3:#85908a;
+  --r:22px;--rs:14px;--sw:238px;--th:72px;
+}
+html{font-size:15px}
+body{
+  color:var(--t1);
+  background:
+    radial-gradient(ellipse at 4% 4%,rgba(232,174,138,.37),transparent 36%),
+    radial-gradient(ellipse at 93% 17%,rgba(168,198,195,.32),transparent 34%),
+    radial-gradient(ellipse at 71% 98%,rgba(231,210,177,.32),transparent 38%),
+    linear-gradient(140deg,#f8f6f1 0%,#edf0ed 48%,#f2eee7 100%);
+}
+body,body *{font-family:'DM Sans',sans-serif!important;letter-spacing:normal!important}
+button,input,select{font-size:inherit}
+.lt,.sbl-t,.sc-v,.pt,.w-tmp,.wln,.aptr,.pst,.ctt,.rs-t,.leg-t,.mo-t,.rcn{
+  font-family:'Space Grotesk',sans-serif!important;
+}
+body::after{display:none}
+#app{isolation:isolate}
+.sb,.tb,.sbh,.sbs{
+  background:rgba(255,255,255,.48);
+  border-color:rgba(255,255,255,.76);
+  backdrop-filter:blur(32px) saturate(155%);
+  -webkit-backdrop-filter:blur(32px) saturate(155%);
+}
+.sb{
+  box-shadow:12px 0 42px rgba(67,63,54,.075),inset -1px 0 rgba(255,255,255,.5);
+}
+.sbh{min-height:78px;padding:17px 14px}
+.sbl-t{font-size:1.04rem;letter-spacing:.025em!important;color:#9d5035}
+.sbl-s{font-size:.68rem;color:var(--t3);letter-spacing:.1em!important}
+.sb-tog{border-radius:11px}
+.sbn{gap:7px;padding:18px 11px}
+.nb{padding:12px 13px;border-radius:15px;font-size:.88rem}
+.nb::before{width:3px}
+.nb.act{box-shadow:inset 0 0 0 1px rgba(170,91,61,.07)}
+.ni{font-size:1.12rem}
+.sbs{min-height:62px;padding:14px 18px}
+.sbs-l{font-size:.64rem;letter-spacing:.07em!important}
+.sbs-v{font-size:.77rem}
+.tb{
+  padding:0 clamp(16px,2.4vw,36px);
+  box-shadow:0 6px 26px rgba(64,67,58,.045);
+}
+.sc-l{font-size:.65rem;letter-spacing:.065em!important}
+.sc-v{font-size:1.12rem;color:#a65538}
+.mt-v{font-size:.82rem;color:#586763}
+.pt{font-size:.84rem;font-weight:600;letter-spacing:.035em!important;color:#52635d}
+.tbdiv{background:rgba(91,83,70,.15)}
+.cb,.ab{
+  background:rgba(255,255,255,.57);border:1px solid rgba(255,255,255,.85);
+  box-shadow:0 5px 16px rgba(63,68,58,.055),inset 0 1px rgba(255,255,255,.8);
+  border-radius:24px;padding:7px 12px;font-size:.82rem;
+  backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);
+}
+.ab{background:rgba(255,255,255,.58);border-color:rgba(169,91,61,.15);color:#a65538}
+.pi{padding:clamp(16px,2.4vw,30px);gap:20px}
+.gp,.mc-pnl,.ml,.rs-pnl,.apd,.rc,.ms-i,.ei,.wp-i,.tfi,.sc,.mst{
+  border:1px solid rgba(255,255,255,.82);
+  background:linear-gradient(145deg,rgba(255,255,255,.72),rgba(255,255,255,.42));
+  box-shadow:0 14px 38px rgba(65,67,59,.075),inset 0 1px rgba(255,255,255,.84);
+  backdrop-filter:blur(30px) saturate(155%);
+  -webkit-backdrop-filter:blur(30px) saturate(155%);
+}
+.gp,.mc-pnl,.ml,.rs-pnl{border-radius:22px}
+.pst{
+  font-size:.78rem;color:#8f5039;letter-spacing:.025em!important;
+  border-bottom-color:rgba(96,81,66,.1);padding-bottom:11px;margin-bottom:15px;
+}
+.wh-hero{padding:clamp(20px,3vw,34px);background:linear-gradient(135deg,rgba(255,255,255,.72),rgba(238,230,218,.42))}
+.wm{margin-bottom:22px;gap:18px}
+.wli{width:48px;height:48px;border-radius:17px;background:rgba(189,104,72,.1);color:#a65538;display:grid;place-items:center}
+.wln{font-size:1.12rem;color:#394540;font-weight:600}
+.wll{font-size:.8rem;color:var(--t2)}
+.w-tmp{font-size:clamp(2.4rem,4vw,3.3rem);font-weight:600;color:#a65538;text-shadow:none}
+.w-cond{font-size:.77rem;color:var(--t2);line-height:1.5}
+.w-sr{gap:12px}
+.ws{
+  min-height:104px;gap:7px;padding:15px 10px;
+  border:1px solid rgba(255,255,255,.85);border-radius:17px;
+  background:rgba(255,255,255,.42);box-shadow:inset 0 1px rgba(255,255,255,.8);
+}
+.wi{font-size:1rem}
+.wsl{font-size:.62rem;letter-spacing:.045em!important}
+.wsv{font-size:.96rem;color:#3e4945}
+.wgrid{grid-template-columns:minmax(0,1fr) 250px;gap:16px}
+.w-hist,.wrose,.w-eva{padding:20px}
+.w-hist{grid-row:1/3}
+.sc{
+  grid-template-columns:72px repeat(4,minmax(0,1fr));
+  gap:8px;padding:12px;border-radius:15px;
+  background:rgba(255,255,255,.46);
+}
+.sn{font-size:.72rem;color:#a65538}
+.sl{font-size:.58rem}
+.sv{font-size:.76rem;color:#59645f}
+.sv.hl{color:#638c98}
+.ei{padding:10px 12px;font-size:.8rem;background:rgba(255,255,255,.46)}
+.mc-pnl,.ml,.rs-pnl{background:rgba(255,255,255,.67)}
+.ctt,.leg-t,.rs-t{font-size:.76rem;letter-spacing:.035em!important}
+.lt-tog{font-size:.8rem;color:var(--t2)}
+.cbtn,.rcbtn{
+  background:rgba(255,255,255,.62);border-color:rgba(255,255,255,.85);
+  border-radius:12px;color:#46534e;padding:9px 12px;font-size:.8rem;
+}
+.cbtn:hover,.rcbtn:hover{background:rgba(255,255,255,.9)}
+.map-wrap,#map,.leaflet-container{background:#e8e4da!important}
+.leaflet-control-zoom a{color:#46534e!important}
+.leaflet-control-attribution{background:rgba(255,255,255,.72)!important;color:#56615b!important;backdrop-filter:blur(14px)}
+.gc,.apct{padding:18px}
+.gg{gap:7px}
+.gg label{font-size:.66rem;color:#77827c;letter-spacing:.045em!important}
+.gg input,.gg select{
+  min-height:42px;padding:9px 12px;border-radius:13px;
+  border-color:rgba(101,94,81,.16);background:rgba(255,255,255,.7);
+  font-size:.88rem;color:#36413d;
+}
+.fb{
+  padding:10px 17px;border-radius:13px;
+  background:linear-gradient(135deg,#a95638,#d08a67);
+  box-shadow:0 8px 20px rgba(166,93,64,.18);font-size:.82rem;letter-spacing:normal!important;
+}
+.fb.sec{background:rgba(255,255,255,.67);color:#995038;border-color:rgba(255,255,255,.9)}
+.gm{font-size:.8rem}
+.gm-r{font-size:.76rem;color:#a65538}
+.pg{gap:14px}
+.pc{border-radius:18px;background:rgba(255,255,255,.6);border-color:rgba(255,255,255,.86)}
+.po{background:linear-gradient(to top,rgba(34,39,36,.78),transparent);padding:22px 12px 10px}
+.po-cam{font-size:.69rem;color:#f5d6c5}
+.po-sol{font-size:.72rem;color:#fff}
+.mg,.tg{gap:18px}
+.m-inf,.m-rv,.m-wp,.m-sci,.tc-p,.ts{padding:20px}
+.ms-i,.tfi,.wp-i{padding:14px;border-radius:15px;background:rgba(255,255,255,.42)}
+.ms-l,.tfl{font-size:.68rem}
+.ms-v,.tfv{font-size:.91rem}
+.rc{padding:17px;border-radius:18px;background:rgba(255,255,255,.42)}
+.rcn{font-size:.85rem}
+.rcl,.ri,.wp-e,.sci-i{font-size:.78rem}
+.ri{border-bottom-color:rgba(96,81,66,.09)}
+.rcbtn{font-size:.78rem}
+.sci-i{padding:8px 10px}
+.scp{margin-top:5px}
+.apc{gap:18px}
+.apct{align-items:flex-end}
+.apd{
+  background:rgba(255,255,255,.46);border-radius:24px;
+  box-shadow:0 18px 48px rgba(65,67,59,.085),inset 0 1px rgba(255,255,255,.9);
+}
+.apc2{
+  gap:clamp(22px,3.5vw,48px);padding:clamp(18px,3vw,40px);
+  background:linear-gradient(145deg,rgba(255,255,255,.62),rgba(246,244,238,.5));
+}
+.apim{flex:0 0 57%;box-shadow:0 14px 34px rgba(30,36,32,.16)}
+.apim img{
+  max-height:66vh;object-fit:contain;background:rgba(45,50,45,.04);
+}
+.apin{gap:15px}
+.apdb{font-size:.75rem;color:#994d34;background:rgba(189,104,72,.1);border-color:rgba(189,104,72,.16)}
+.aptr{font-size:clamp(1.25rem,2vw,1.8rem);line-height:1.24;letter-spacing:-.025em!important}
+.apcp{font-size:.75rem}
+.apex{font-size:.91rem;line-height:1.75;color:#56625d}
+.apex a{color:#9e5035}
+.tg{grid-template-columns:repeat(2,minmax(0,1fr));align-items:start}
+.tc-p{
+  position:relative;min-width:0;height:320px;min-height:320px;
+  display:flex;flex-direction:column;overflow:hidden;
+}
+.tc-p .pst{flex-shrink:0;min-height:32px}
+.tc-p canvas{
+  display:block;position:relative;flex:1;min-width:0;min-height:0;
+  width:100%!important;height:230px!important;max-height:230px;
+}
+.ts{grid-column:1/3}
+.tf{gap:12px}
+.tfi{min-height:66px}
+.lbx,.mo{background:rgba(37,43,40,.44);backdrop-filter:blur(24px) saturate(130%)}
+.mo-b{border-radius:22px}
+.spin{border-color:rgba(98,109,104,.14);border-top-color:#a65538}
+.sd.warm{background:#ba7745;box-shadow:0 0 8px rgba(186,119,69,.28)}
+@media(max-width:1024px){
+  .wgrid{grid-template-columns:minmax(0,1fr) 220px}
+  .sc{grid-template-columns:62px repeat(4,minmax(0,1fr))}
+}
+@media(max-width:768px){
+  .sb{width:72px;min-width:72px}
+  .sbn{padding:14px 8px}
+  .nb{justify-content:center;padding:12px 8px}
+  .nl,.sbl-t,.sbl-s{display:none}
+  .sbs{justify-content:center;padding:12px 8px}
+  .sbs>div:last-child{display:none}
+  .tbl .sc-blk:first-child,.tbdiv{display:none}
+  .tbr .cb:nth-of-type(2),.tbr .ab{display:none}
+  .tbl{min-width:0}
+  .tbr{flex:0 0 auto}
+  .wgrid{grid-template-columns:1fr}
+  .w-hist{grid-row:auto}
+  .tg{grid-template-columns:1fr}
+  .tc-p{height:300px;min-height:300px}
+  .ts{grid-column:1}
+  .apc2{flex-direction:column}
+  .apim{width:100%;flex:auto}
+  .apim img{max-height:52vh}
+  .apc{height:auto}
+  .apd{min-height:0}
+}
+@media(max-width:540px){
+  .tb{padding:0 12px;gap:8px}
+  .tbdiv,.sc-blk:nth-of-type(2),.cb:nth-of-type(2){display:none}
+  .pt{font-size:.7rem}
+  .pi{padding:12px;gap:13px}
+  .w-sr{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .sc{grid-template-columns:1fr 1fr}
+  .sc .sn{grid-column:1/-1}
+  .tf{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .mo-b{min-width:0;width:calc(100vw - 28px)}
+}
+.gallery-note{font-size:.78rem;color:var(--t2);flex:1 1 260px}
+.gallery-more{align-self:center;margin:10px auto 2px}
+.fb:disabled,.cbtn:disabled{opacity:.48;cursor:not-allowed;transform:none;box-shadow:none}
+.m-rv{grid-column:1/3}
+.rcs{grid-template-columns:repeat(3,minmax(0,1fr))}
+.rc{min-width:0;background:rgba(255,255,255,.48);border-color:rgba(255,255,255,.82)}
+.rch{min-height:44px}
+.rcn{font-size:.9rem;letter-spacing:normal}
+.mission-note{font-size:.82rem;color:var(--t2);line-height:1.55;margin:-3px 0 15px}
+.mission-summary{font-size:.83rem;color:#59645f;line-height:1.6;margin:8px 0 13px;min-height:76px}
+.mission-facts{font-size:.76rem;color:var(--t2);line-height:1.7;margin-bottom:12px}
+.mission-facts strong{color:#48534d;font-weight:600}
+.mission-source{font-size:.75rem;color:#92523a;text-decoration:none}
+.mission-source:hover{text-decoration:underline}
+.mission-detail{font-size:.88rem;color:#56625d;line-height:1.7;margin:12px 0}
+.mission-link{display:inline-block;margin-top:12px;color:#995038}
+.gallery-empty{grid-column:1/-1}
+.mission-note+.rcs{align-items:stretch}
+.rcbtn{width:auto;padding:8px 12px}
+.pc{text-align:left;color:inherit}
+.pc{animation:none;transition:none}
+.pc:hover{transform:none}
+.pc.image-error img{display:none}
+.pc.image-error::after{content:'NASA image unavailable';position:absolute;inset:0;display:grid;place-items:center;padding:12px;color:var(--t2);font-size:.8rem;text-align:center}
+@media(max-width:1100px){.rcs{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:768px){.m-rv{grid-column:1}.rcs{grid-template-columns:1fr}.mission-summary{min-height:0}.gallery-note{flex-basis:100%}}
+</style>
+</head>
+<body>
+
+<!-- LOADING -->
+<div id="ls">
+  <div class="lc">
+    <div class="ll">
+      <svg viewBox="0 0 100 100" width="76" height="76">
+        <circle cx="50" cy="50" r="40" fill="none" stroke="#ff6b35" stroke-width="1.5" stroke-dasharray="6 4"/>
+        <circle cx="50" cy="50" r="22" fill="#c1440e"/>
+        <circle cx="43" cy="40" r="6" fill="#8B2500" opacity=".8"/>
+        <circle cx="60" cy="55" r="9" fill="#8B2500" opacity=".6"/>
+        <circle cx="40" cy="58" r="4" fill="#8B2500" opacity=".5"/>
+      </svg>
+    </div>
+    <div class="lt">MARS EXPLORER</div>
+    <div class="ls2">NASA Mission Control</div>
+    <div class="lbc"><div class="lb"></div></div>
+    <div class="lst" id="lst">Initializing systems...</div>
+  </div>
+</div>
+
+<!-- APP -->
+<div id="app" class="hidden">
+
+  <!-- SIDEBAR -->
+  <nav class="sb" id="sb">
+    <div class="sbh">
+      <div class="sbl">
+        <svg viewBox="0 0 60 60" width="34" height="34" style="flex-shrink:0">
+          <circle cx="30" cy="30" r="23" fill="#c1440e"/>
+          <circle cx="24" cy="22" r="4" fill="#8B2500" opacity=".8"/>
+          <circle cx="36" cy="33" r="6" fill="#8B2500" opacity=".6"/>
+          <circle cx="22" cy="37" r="3" fill="#8B2500" opacity=".5"/>
+        </svg>
+        <div><div class="sbl-t">MARS</div><div class="sbl-s">EXPLORER</div></div>
+      </div>
+      <button class="sb-tog" id="sbt">☰</button>
+    </div>
+    <div class="sbn">
+      <button class="nb act" data-p="map"><span class="ni">🗺️</span><span class="nl">Surface Map</span></button>
+      <button class="nb" data-p="weather"><span class="ni">🌡️</span><span class="nl">Conditions</span></button>
+      <button class="nb" data-p="gallery"><span class="ni">📸</span><span class="nl">Rover Photos</span></button>
+      <button class="nb" data-p="mission"><span class="ni">🚀</span><span class="nl">Mission Plan</span></button>
+      <button class="nb" data-p="apod"><span class="ni">♂</span><span class="nl">Mars Images</span></button>
+      <button class="nb" data-p="telem"><span class="ni">📊</span><span class="nl">Telemetry</span></button>
+    </div>
+    <div class="sbs">
+      <div class="sd" id="image-status-dot"></div>
+      <div><span class="sbs-l">MARS IMAGE ARCHIVE</span><span class="sbs-v" id="image-status">Connecting</span></div>
+    </div>
+  </nav>
+
+  <!-- MAIN -->
+  <main class="mc">
+
+    <!-- TOPBAR -->
+    <header class="tb">
+      <div class="tbl">
+        <div class="sc-blk"><span class="sc-l">LOCAL MARS SOL · ELYSIUM</span><span class="sc-v" id="csol">—</span></div>
+        <div class="tbdiv"></div>
+        <div class="sc-blk"><span class="sc-l">LOCAL SOL TIME · ELYSIUM</span><span class="mt-v" id="mtime">00:00:00 LST</span></div>
+      </div>
+      <div class="tbc"><div class="pt" id="ptitle">SURFACE MAP</div></div>
+      <div class="tbr">
+        <div class="cb"><span>🌡️</span><span id="tbtemp">— °C</span></div>
+        <div class="cb"><span>💨</span><span id="tbwind">— m/s</span></div>
+        <div class="ab">⚠️ <span id="ac">0</span> alerts</div>
+      </div>
+    </header>
+
+    <!-- MAP PANEL -->
+    <section class="panel act" id="panel-map">
+      <div class="map-wrap">
+        <div class="mc-pnl gp">
+          <div class="ctt">MAP LAYERS</div>
+          <label class="lt-tog"><input type="checkbox" id="l-sites" checked/><span class="trk"></span><span>Landing Sites</span></label>
+          <label class="lt-tog"><input type="checkbox" id="l-roi" checked/><span class="trk"></span><span>Regions of Interest</span></label>
+          <label class="lt-tog"><input type="checkbox" id="l-route"/><span class="trk"></span><span>Route Planning</span></label>
+          <div class="cdiv"></div>
+          <button class="cbtn" id="btn-wp">📍 Add Waypoint</button>
+          <button class="cbtn dng" id="btn-cr">🗑 Clear Route</button>
+        </div>
+        <div id="map"></div>
+        <div class="ml gp">
+          <div class="leg-t">LEGEND</div>
+          <div class="leg-i"><span class="leg-d" style="background:#ff6b35;color:#ff6b35"></span>Curiosity</div>
+          <div class="leg-i"><span class="leg-d" style="background:#4fc3f7;color:#4fc3f7"></span>Perseverance</div>
+          <div class="leg-i"><span class="leg-d" style="background:#ce93d8;color:#ce93d8"></span>InSight</div>
+          <div class="leg-i"><span class="leg-d" style="background:#a5d6a7;color:#a5d6a7"></span>Historical Sites</div>
+          <div class="leg-i"><span class="leg-d" style="background:#ffe082;color:#ffe082"></span>Regions of Interest</div>
+          <div class="leg-i"><span class="leg-d" style="background:#ff4444;color:#ff4444"></span>Waypoint</div>
+        </div>
+        <div class="rs-pnl gp hidden" id="rs">
+          <div class="rs-t">ROUTE ANALYSIS</div>
+          <div class="rs-i"><span class="rs-l">Total Distance</span><span class="rs-v" id="rdist">0.0 km</span></div>
+          <div class="rs-i"><span class="rs-l">Est. EVA Duration</span><span class="rs-v" id="rdur">0h 0m</span></div>
+          <div class="rs-i"><span class="rs-l">Waypoints</span><span class="rs-v" id="rwp">0</span></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- WEATHER PANEL -->
+    <section class="panel" id="panel-weather">
+      <div class="pi">
+        <div class="gp wh-hero">
+          <div class="wm">
+            <div class="wloc"><div class="wli">♂</div><div><div class="wln">Elysium Planitia</div><div class="wll">Mars surface · local solar climate model</div></div></div>
+            <div class="w-tmp" id="wtmp">—°C</div>
+            <div class="w-cond" id="wcond">Loading atmospheric data...</div>
+          </div>
+          <div class="w-sr">
+            <div class="ws"><div class="wi">🌡️</div><div class="wsl">SOL LOW</div><div class="wsv" id="wmin">—</div></div>
+            <div class="ws"><div class="wi">🌡️</div><div class="wsl">SOL HIGH</div><div class="wsv" id="wmax">—</div></div>
+            <div class="ws"><div class="wi">💨</div><div class="wsl">WIND AVG</div><div class="wsv" id="wwind">—</div></div>
+            <div class="ws"><div class="wi">🔵</div><div class="wsl">PRESSURE</div><div class="wsv" id="wpres">—</div></div>
+            <div class="ws"><div class="wi">🕒</div><div class="wsl">SOL LENGTH</div><div class="wsv">24h 39m</div></div>
+            <div class="ws"><div class="wi">📍</div><div class="wsl">SITE</div><div class="wsv">Elysium</div></div>
+          </div>
+        </div>
+        <div class="wgrid">
+          <div class="gp w-hist">
+            <div class="pst">📅 RECENT MARS SOLS · MODELED ESTIMATES</div>
+            <div class="sh" id="sh"><div class="spin"></div></div>
+          </div>
+          <div class="gp wrose">
+            <div class="pst">💨 WIND ROSE</div>
+            <canvas id="wrc" width="210" height="210"></canvas>
+          </div>
+          <div class="gp w-eva">
+            <div class="pst">🧑‍🚀 EVA ADVISORY · MODEL ONLY</div>
+            <div class="wll">Planning aid, not operational or safety advice.</div>
+            <div class="eva-i" id="eva"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- GALLERY PANEL -->
+    <section class="panel" id="panel-gallery">
+      <div class="pi">
+        <div class="gp gc">
+          <div class="gg"><label>ROVER MISSION</label><select id="rov"><option value="curiosity">Curiosity</option><option value="perseverance">Perseverance</option><option value="opportunity">Opportunity</option><option value="spirit">Spirit</option><option value="sojourner">Sojourner · Pathfinder</option></select></div>
+          <button class="fb" id="btn-fetch">🔭 FIND PHOTOS</button>
+          <span class="gallery-note">NASA image archive · photos are historical, not live rover feeds</span>
+        </div>
+        <div class="gm" aria-live="polite"><span class="gm-r" id="gmr">NASA IMAGE ARCHIVE</span><span class="gm-sep">|</span><span id="gms">Choose a rover and find photos</span><span class="gm-sep">|</span><span><span id="gmc">0</span> photos</span></div>
+        <div class="pg" id="pg" aria-live="polite">
+          <div class="gph"><div class="gph-ic">📷</div><div class="gph-t">Explore NASA's rover photo archive</div><div class="gph-s">Choose any active or past rover mission to browse its Mars images.</div></div>
+        </div>
+        <button class="fb sec gallery-more" id="btn-more" disabled>LOAD MORE PHOTOS</button>
+      </div>
+    </section>
+
+    <!-- MISSION PANEL -->
+    <section class="panel" id="panel-mission">
+      <div class="pi">
+        <div class="mg">
+          <div class="gp m-inf">
+            <div class="pst">🚀 MISSION OVERVIEW</div>
+            <div class="ms">
+              <div class="ms-i"><span class="ms-l">Active rover missions</span><span class="ms-v" id="active-rovers">2</span></div>
+              <div class="ms-i"><span class="ms-l">Past rover missions</span><span class="ms-v" id="past-rovers">3</span></div>
+              <div class="ms-i"><span class="ms-l">Photo source</span><span class="ms-v">NASA archive</span></div>
+              <div class="ms-i"><span class="ms-l">Data status</span><span class="ms-v">Mission records</span></div>
+            </div>
+          </div>
+          <div class="gp m-rv">
+            <div class="pst">🤖 ACTIVE & HISTORICAL ROVERS</div>
+            <p class="mission-note">Mission facts are from NASA mission records; photo results are fetched from NASA's image archive.</p>
+            <div class="rcs" id="mission-fleet"></div>
+          </div>
+          <div class="gp m-wp">
+            <div class="pst">📍 PLANNED ROUTE WAYPOINTS</div>
+            <div class="wl-l" id="wl"><div class="wp-e">No waypoints yet. Enable Route Planning on the Surface Map and click to place waypoints.</div></div>
+            <div class="wa">
+              <button class="cbtn" id="btn-route-export" onclick="exportRoute()" disabled>📤 Export route</button>
+            </div>
+          </div>
+          <div class="gp m-sci">
+            <div class="pst">🔬 SCIENCE OBJECTIVES</div>
+            <div class="scl">
+              <label class="sci-i"><input type="checkbox" class="scc"/> Collect rock core sample</label>
+              <label class="sci-i"><input type="checkbox" class="scc"/> Photograph strata layers</label>
+              <label class="sci-i"><input type="checkbox" class="scc"/> Deploy weather sensor</label>
+              <label class="sci-i"><input type="checkbox" class="scc" checked/> Analyze soil composition</label>
+              <label class="sci-i"><input type="checkbox" class="scc"/> Search for biosignatures</label>
+              <label class="sci-i"><input type="checkbox" class="scc"/> Map subsurface radar</label>
+              <label class="sci-i"><input type="checkbox" class="scc"/> Test oxygen production (MOXIE)</label>
+              <label class="sci-i"><input type="checkbox" class="scc"/> Collect atmospheric sample</label>
+            </div>
+            <div class="scp"><div class="scpb"><div class="scpf" id="spf"></div></div><span class="scpt" id="spt">1/8</span></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- APOD PANEL -->
+    <section class="panel" id="panel-apod">
+      <div class="pi">
+        <div class="apc">
+          <div class="gp apct">
+            <div class="gg"><label>ARCHIVE YEAR · OPTIONAL</label><input type="number" id="apdate" min="1960" placeholder="Any year"/></div>
+            <button class="fb" id="btn-apod">🔎 BROWSE MARS</button>
+            <button class="fb sec" id="btn-rnd">🎲 RANDOM MARS IMAGE</button>
+          </div>
+          <div class="apd" id="apd">
+            <div class="gph"><div class="gph-ic">♂</div><div class="gph-t">NASA’s Mars exploration archive</div><div class="gph-s">Browse a year or discover a random image of Mars.</div></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- TELEMETRY PANEL -->
+    <section class="panel" id="panel-telem">
+      <div class="pi">
+        <div class="tg">
+          <div class="gp tc-p"><div class="pst">🌡️ TEMPERATURE · LAST 7 MARS SOLS (°C)</div><canvas id="tc" height="130"></canvas></div>
+          <div class="gp tc-p"><div class="pst">🔵 SURFACE PRESSURE · MODELED (Pa)</div><canvas id="pc2" height="130"></canvas></div>
+          <div class="gp tc-p"><div class="pst">💨 WIND SPEED · MODELED (m/s)</div><canvas id="wc2" height="130"></canvas></div>
+          <div class="gp ts">
+            <div class="pst">📋 MARS ENVIRONMENT FACTS</div>
+            <div class="tf">
+              <div class="tfi"><span class="tfl">Martian Sol</span><span class="tfv">24h 39m 35s</span></div>
+              <div class="tfi"><span class="tfl">Surface Gravity</span><span class="tfv">3.72 m/s²</span></div>
+              <div class="tfi"><span class="tfl">Atmosphere</span><span class="tfv">95% CO₂</span></div>
+              <div class="tfi"><span class="tfl">Atm. Pressure</span><span class="tfv">~700 Pa avg</span></div>
+              <div class="tfi"><span class="tfl">Temp Range</span><span class="tfv">−153 to 20°C</span></div>
+              <div class="tfi"><span class="tfl">Year Length</span><span class="tfv">687 Earth days</span></div>
+              <div class="tfi"><span class="tfl">Distance from Sun</span><span class="tfv">228M km avg</span></div>
+              <div class="tfi"><span class="tfl">Moons</span><span class="tfv">Phobos & Deimos</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+  </main>
+</div>
+
+<!-- LIGHTBOX -->
+<div class="lbx hidden" id="lbx">
+  <button class="lbx-cl" id="lbx-cl">✕</button>
+  <div class="lbx-ct">
+    <img src="" alt="" id="lbx-img"/>
+    <div class="lbx-inf" id="lbx-inf"></div>
+  </div>
+</div>
+
+<script>
+// ========== CONFIG ==========
+const NASA_IMAGES = 'https://images-api.nasa.gov/search';
+const MARS_SITE_LONGITUDE = 135.6234;
+const MARS_SOL_DAYS = 1.0274912517;
+const MARS_YEAR_SOLS = 668.5991;
+
+// ========== STATE ==========
+const S = {
+  panel:'map', wx:null, wps:[], routing:false,
+  map:null, wpLayer:null, routeLine:null,
+  tCh:null, pCh:null, wCh:null,
+  imageRequest:0,
+  gallery:{rover:null,page:0,total:0,images:[],loading:false,request:0}
+};
+
+// ========== DATA ==========
+const SITES = [
+  {id:'curiosity',name:'Curiosity Rover',lat:-4.5895,lng:137.4417,status:'Active',mission:'Mars Science Lab',date:'2012-08-06',color:'#ff6b35',icon:'🚗',desc:'Investigating Mars climate & geology in Gale Crater.'},
+  {id:'perseverance',name:'Perseverance Rover',lat:18.4447,lng:77.4508,status:'Active',mission:'Mars 2020',date:'2021-02-18',color:'#4fc3f7',icon:'🤖',desc:'Seeking signs of ancient life in Jezero Crater.'},
+  {id:'insight',name:'InSight Lander',lat:4.5024,lng:135.6234,status:'Concluded',mission:'InSight',date:'2018-11-26',color:'#ce93d8',icon:'📡',desc:'Studied Martian interior via seismology. Detected 1300+ marsquakes.'},
+  {id:'opportunity',name:'Opportunity Rover',lat:-1.9462,lng:-5.5266,status:'Concluded',mission:'MER-B',date:'2004-01-25',color:'#a5d6a7',icon:'🏛️',desc:'15-year mission. Found ancient water evidence.'},
+  {id:'spirit',name:'Spirit Rover',lat:-14.5684,lng:175.4729,status:'Concluded',mission:'MER-A',date:'2004-01-04',color:'#ffe082',icon:'🏛️',desc:'Explored Gusev Crater. Found silica-rich soil.'},
+  {id:'pathfinder',name:'Mars Pathfinder',lat:19.13,lng:-33.22,status:'Concluded',mission:'Pathfinder',date:'1997-07-04',color:'#ff8a65',icon:'🏛️',desc:'First rover on Mars (Sojourner). Airbag landing.'},
+];
+const ROIS = [
+  {name:'Olympus Mons',lat:18.65,lng:-133.8,type:'Volcano',icon:'🌋',desc:'Largest volcano in solar system. 21.9 km high.'},
+  {name:'Valles Marineris',lat:-13.9,lng:-59.2,type:'Canyon',icon:'🏔️',desc:'4000 km long canyon, up to 7 km deep.'},
+  {name:'Hellas Planitia',lat:-42.4,lng:70.5,type:'Impact Basin',icon:'⭕',desc:'Deepest crater on Mars. 7 km deep.'},
+  {name:'North Polar Cap',lat:83.0,lng:0.0,type:'Ice Cap',icon:'❄️',desc:'Water ice & CO₂ ice. Future water resource.'},
+  {name:'Ares Vallis',lat:19.13,lng:-33.22,type:'Flood Channel',icon:'🌊',desc:'Ancient catastrophic flood channel.'},
+];
+const ROVER_MISSIONS = [
+  {id:'curiosity',name:'Curiosity',icon:'🚗',color:'#b96543',status:'Active',mission:'Mars Science Laboratory',site:'Gale Crater',launch:'Nov 26, 2011',landing:'Aug 6, 2012',duration:'Ongoing',distance:'Ongoing',summary:'Studies Mars climate and geology while climbing Mount Sharp, looking for evidence of habitable environments.',objective:'Climate, geology, and ancient habitability',source:'https://science.nasa.gov/mission/msl-curiosity/',query:'Mars Curiosity rover Gale Crater panorama'},
+  {id:'perseverance',name:'Perseverance',icon:'🤖',color:'#658f9b',status:'Active',mission:'Mars 2020',site:'Jezero Crater',launch:'Jul 30, 2020',landing:'Feb 18, 2021',duration:'Ongoing',distance:'Ongoing',summary:'Explores an ancient lake and river delta, studies rocks, and collects samples for possible return to Earth.',objective:'Ancient life, geology, and sample caching',source:'https://science.nasa.gov/mission/mars-2020-perseverance/',query:'Mars Perseverance rover panorama'},
+  {id:'opportunity',name:'Opportunity',icon:'🛰️',color:'#8a9b70',status:'Completed',mission:'Mars Exploration Rover B',site:'Meridiani Planum',launch:'Jul 7, 2003',landing:'Jan 25, 2004',duration:'5,111 sols',distance:'45.16 km',summary:'A 90-sol mission that ran for more than 14 years and found strong evidence that liquid water once altered Martian rocks.',objective:'Past water and surface geology',source:'https://science.nasa.gov/mission/mer-opportunity/',query:'Mars Opportunity rover panorama'},
+  {id:'spirit',name:'Spirit',icon:'🛰️',color:'#a28157',status:'Completed',mission:'Mars Exploration Rover A',site:'Gusev Crater',launch:'Jun 10, 2003',landing:'Jan 4, 2004',duration:'2,210 sols',distance:'7.73 km',summary:'Explored Gusev Crater and found evidence of past water, including silica-rich soil deposits.',objective:'Volcanic rocks and signs of past water',source:'https://science.nasa.gov/mission/mer-spirit/',query:'Mars Spirit rover Gusev image'},
+  {id:'sojourner',name:'Sojourner',icon:'🛞',color:'#b18b5f',status:'Completed',mission:'Mars Pathfinder',site:'Ares Vallis',launch:'Dec 4, 1996',landing:'Jul 4, 1997',duration:'83 sols',distance:'About 100 m',summary:'The first successful Mars rover traveled among nearby rocks, testing a new way to explore another planet.',objective:'Test rover mobility and examine rocks',source:'https://science.nasa.gov/mission/pathfinder/',query:'Mars Sojourner rover'},
+];
+
+// ========== BOOT ==========
+window.addEventListener('DOMContentLoaded',()=>{
+  const statuses=['Preparing the Mars dashboard...','Loading rover mission records...','Connecting to NASA image archive...','Mission dashboard ready.'];
+  let i=0;
+  const el=document.getElementById('lst');
+  const iv=setInterval(()=>{if(++i<statuses.length)el.textContent=statuses[i];else clearInterval(iv);},650);
+  setTimeout(()=>{
+    document.getElementById('ls').style.display='none';
+    document.getElementById('app').classList.remove('hidden');
+    init();
+  },3800);
+});
+
+function init(){
+  setupNav(); setupSidebar(); initMap();
+  startMarsTime(); loadWeather();
+  setupGallery(); setupMission(); setupAPOD(); setupLightbox();
+  updateSciProg();
+}
+
+// ========== NAV ==========
+const PTITLES={map:'SURFACE MAP',weather:'MARS SURFACE CONDITIONS',gallery:'ROVER PHOTO GALLERY',mission:'MISSION PLANNER',apod:'MARS IMAGE ARCHIVE',telem:'TELEMETRY DASHBOARD'};
+function setupNav(){
+  document.querySelectorAll('.nb').forEach(b=>{
+    b.addEventListener('click',()=>{
+      document.querySelectorAll('.nb').forEach(x=>x.classList.remove('act'));
+      b.classList.add('act');
+      const p=b.dataset.p;
+      document.querySelectorAll('.panel').forEach(x=>x.classList.remove('act'));
+      document.getElementById('panel-'+p).classList.add('act');
+      document.getElementById('ptitle').textContent=PTITLES[p]||'';
+      S.panel=p;
+      if(p==='map') setTimeout(()=>S.map&&S.map.invalidateSize(),200);
+      if(p==='telem'&&S.wx) setTimeout(renderCharts,200);
+    });
+  });
+}
+function setupSidebar(){
+  document.getElementById('sbt').addEventListener('click',()=>document.getElementById('sb').classList.toggle('col'));
+}
+
+// ========== MAP ==========
+function initMap(){
+  const map=L.map('map',{center:[0,0],zoom:3,minZoom:1,maxZoom:9,
+    zoomControl:true,attributionControl:true});
+
+  // OpenPlanetaryMap is public and does not require an API key.
+  const marsTiles = L.tileLayer(
+    'https://cartocdn-gusc.global.ssl.fastly.net/opmbuilder/api/v1/map/named/opm-mars-basemap-v0-2/all/{z}/{x}/{y}.png',
+    {attribution:'© OpenPlanetaryMap | NASA/JPL/USGS',maxZoom:8,tileSize:256}
+  );
+
+  // NASA WMTS provides a second public Mars basemap.
+  const fallback = L.tileLayer(
+    'https://api.nasa.gov/mars-wmts/catalog/Mars_Viking_MDIM21_ClrMosaic_global_232m/1.0.0/default/default028mm/{z}/{y}/{x}.jpg',
+    {attribution:'© NASA/JPL/USGS Mars MDIM',maxZoom:8,tileSize:256}
+  );
+
+  marsTiles.addTo(map);
+  marsTiles.on('tileerror',function(){
+    if(!map.hasLayer(fallback)){marsTiles.remove();fallback.addTo(map);}
+  });
+
+  S.map=map; S.wpLayer=L.layerGroup().addTo(map);
+  addSiteMarkers(); addROIMarkers();
+  map.on('click',onMapClick);
+  setupLayerToggles();
+  document.getElementById('btn-wp').addEventListener('click',toggleRoute);
+  document.getElementById('btn-cr').addEventListener('click',clearRoute);
+}
+
+function mkSiteIcon(s){
+  return L.divIcon({html:`<div style="width:22px;height:22px;background:${s.color};border-radius:50% 50% 50% 0;transform:rotate(-45deg);border:2px solid rgba(255,255,255,.35);box-shadow:0 0 10px ${s.color}88;display:flex;align-items:center;justify-content:center;position:relative"><div style="transform:rotate(45deg);font-size:9px;position:absolute">${s.icon}</div></div>`,className:'',iconSize:[22,30],iconAnchor:[11,30],popupAnchor:[0,-30]});
+}
+function mkROIIcon(r){
+  return L.divIcon({html:`<div style="background:rgba(255,224,130,.12);border:1.5px solid rgba(255,224,130,.5);border-radius:50%;width:26px;height:26px;display:flex;align-items:center;justify-content:center;font-size:13px;box-shadow:0 0 8px rgba(255,224,130,.3)">${r.icon}</div>`,className:'',iconSize:[26,26],iconAnchor:[13,13]});
+}
+
+const LG={sites:null,rois:null};
+function addSiteMarkers(){
+  const g=L.layerGroup();
+  SITES.forEach(s=>{
+    L.marker([s.lat,s.lng],{icon:mkSiteIcon(s)})
+      .bindPopup(`<div class="pu-t">${s.icon} ${s.name}</div><div class="pu-i"><div>📍 <span>${s.lat.toFixed(3)}°, ${s.lng.toFixed(3)}°</span></div><div>🛸 <span>${s.mission}</span></div><div>🗓️ <span>${s.date}</span></div><div>⚡ <span style="color:${s.status==='Active'?'#4ade80':'#9ca3af'}">${s.status}</span></div><div style="margin-top:7px;font-size:.68rem;color:#b08060;line-height:1.5">${s.desc}</div></div>`,{maxWidth:270})
+      .addTo(g);
+  });
+  g.addTo(S.map); LG.sites=g;
+}
+function addROIMarkers(){
+  const g=L.layerGroup();
+  ROIS.forEach(r=>{
+    L.marker([r.lat,r.lng],{icon:mkROIIcon(r)})
+      .bindPopup(`<div class="pu-t">${r.icon} ${r.name}</div><div class="pu-i"><div>🏷️ <span>${r.type}</span></div><div style="margin-top:7px;font-size:.68rem;color:#b08060;line-height:1.5">${r.desc}</div></div>`,{maxWidth:260})
+      .addTo(g);
+  });
+  g.addTo(S.map); LG.rois=g;
+}
+function setupLayerToggles(){
+  document.getElementById('l-sites').addEventListener('change',e=>{e.target.checked?LG.sites.addTo(S.map):S.map.removeLayer(LG.sites);});
+  document.getElementById('l-roi').addEventListener('change',e=>{e.target.checked?LG.rois.addTo(S.map):S.map.removeLayer(LG.rois);});
+  document.getElementById('l-route').addEventListener('change',e=>{S.routing=e.target.checked;S.map.getContainer().style.cursor=S.routing?'crosshair':'';});
+}
+function toggleRoute(){
+  S.routing=!S.routing;
+  document.getElementById('l-route').checked=S.routing;
+  document.getElementById('btn-wp').textContent=S.routing?'✅ Click map to place':'📍 Add Waypoint';
+  S.map.getContainer().style.cursor=S.routing?'crosshair':'';
+}
+function onMapClick(e){
+  if(!S.routing)return;
+  const {lat,lng}=e.latlng;
+  const n=S.wps.length+1;
+  S.wps.push({lat,lng,n});
+  L.marker([lat,lng],{icon:L.divIcon({html:`<div style="width:21px;height:21px;background:#ff4444;border:2px solid #ff9999;border-radius:50%;box-shadow:0 0 9px rgba(255,68,68,.65);display:flex;align-items:center;justify-content:center;color:#fff;font-size:9px;font-weight:700;font-family:monospace">${n}</div>`,className:'',iconSize:[21,21],iconAnchor:[10,10]})})
+    .bindPopup(`<div class="pu-t">📍 Waypoint ${n}</div><div class="pu-i"><div>Lat <span>${lat.toFixed(4)}°</span></div><div>Lng <span>${lng.toFixed(4)}°</span></div></div>`)
+    .addTo(S.wpLayer);
+  updateRoute();
+}
+function updateRoute(){
+  if(S.routeLine)S.map.removeLayer(S.routeLine);
+  if(S.wps.length>1)S.routeLine=L.polyline(S.wps.map(w=>[w.lat,w.lng]),{color:'#ff4444',weight:2,opacity:.8,dashArray:'8 4'}).addTo(S.map);
+  let d=0;
+  for(let i=1;i<S.wps.length;i++)d+=hvs(S.wps[i-1].lat,S.wps[i-1].lng,S.wps[i].lat,S.wps[i].lng);
+  const h=d/0.14;
+  document.getElementById('rdist').textContent=d.toFixed(1)+' km';
+  document.getElementById('rdur').textContent=Math.floor(h)+'h '+Math.round((h%1)*60)+'m';
+  document.getElementById('rwp').textContent=S.wps.length;
+  document.getElementById('rs').classList.toggle('hidden',S.wps.length===0);
+  updateWpList();
+}
+function hvs(la1,lo1,la2,lo2){
+  const R=3389.5,d2r=Math.PI/180,dlat=(la2-la1)*d2r,dlon=(lo2-lo1)*d2r;
+  const a=Math.sin(dlat/2)**2+Math.cos(la1*d2r)*Math.cos(la2*d2r)*Math.sin(dlon/2)**2;
+  return R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
+}
+function clearRoute(){
+  S.wps=[]; S.wpLayer.clearLayers();
+  if(S.routeLine){S.map.removeLayer(S.routeLine);S.routeLine=null;}
+  document.getElementById('rs').classList.add('hidden');
+  updateWpList();
+}
+function updateWpList(){
+  const el=document.getElementById('wl');
+  document.getElementById('btn-route-export').disabled=S.wps.length===0;
+  if(!S.wps.length){el.innerHTML='<div class="wp-e">No waypoints yet. Enable Route Planning on the Surface Map and click to place waypoints.</div>';return;}
+  el.innerHTML=S.wps.map(w=>`<div class="wp-i"><div class="wn">${w.n}</div><div class="wco">${w.lat.toFixed(4)}°, ${w.lng.toFixed(4)}°</div></div>`).join('');
+}
+function exportRoute(){
+  if(!S.wps.length){alert('No waypoints to export.');return;}
+  const blob=new Blob([JSON.stringify({mission:'Mars Explorer Route',generated:new Date().toISOString(),waypoints:S.wps},null,2)],{type:'application/json'});
+  Object.assign(document.createElement('a'),{href:URL.createObjectURL(blob),download:'mars_route.json'}).click();
+}
+
+// ========== MARS TIME ==========
+function startMarsTime(){updateMarsTime();setInterval(updateMarsTime,1000);}
+function updateMarsTime(){
+  const mars=getMarsLocalTime();
+  document.getElementById('csol').textContent=mars.sol.toLocaleString();
+  document.getElementById('mtime').textContent=`${String(mars.hours).padStart(2,'0')}:${String(mars.minutes).padStart(2,'0')}:${String(mars.seconds).padStart(2,'0')} LST`;
+  const condition=document.getElementById('wcond');
+  if(condition)condition.textContent=`Sol ${mars.sol} · ${String(mars.hours).padStart(2,'0')}:${String(mars.minutes).padStart(2,'0')} local solar time · modeled estimate, not live telemetry`;
+}
+function getMarsLocalTime(now=Date.now()){
+  const jdUTC=2440587.5+now/86400000;
+  const jdTT=jdUTC+69.184/86400;
+  const msd=(jdTT-2405522.0028779)/MARS_SOL_DAYS;
+  const localMsd=msd+MARS_SITE_LONGITUDE/360;
+  const sol=Math.floor(localMsd);
+  const totalSeconds=Math.floor((localMsd-sol)*88775.244);
+  const marsClockSeconds=totalSeconds*86400/88775.244;
+  const hours=Math.floor(marsClockSeconds/3600)%24;
+  const minutes=Math.floor((marsClockSeconds%3600)/60);
+  const seconds=Math.floor(marsClockSeconds%60);
+  return{sol,hours,minutes,seconds,msd};
+}
+
+// ========== WEATHER ==========
+function loadWeather(){
+  const {sol}=getMarsLocalTime();
+  const sols=Array.from({length:7},(_,index)=>modeledMarsWeather(sol-6+index));
+  renderWeather(sols);
+}
+function modeledMarsWeather(sol){
+  const seasonal=2*Math.PI*(sol%MARS_YEAR_SOLS)/MARS_YEAR_SOLS;
+  const daily=2*Math.PI*(sol*.61803398875%1);
+  const average=-63+4*Math.sin(seasonal)+2.5*Math.sin(daily);
+  const minimum=average-(25+2*Math.cos(daily));
+  const maximum=average+(40+4*Math.cos(daily));
+  const wind=4+7*(.5+.5*Math.sin(daily+1.3));
+  const pressure=730+46*Math.sin(seasonal)+18*Math.cos(daily*.7);
+  const directions=['N','NE','E','SE','S','SW','W','NW'];
+  const windRose=Object.fromEntries(directions.map((direction,index)=>[
+    direction,{ct:Math.round(20+80*(.5+.5*Math.sin(daily+index*Math.PI/4)))}
+  ]));
+  return{
+    sol,
+    at:{av:average,mn:minimum,mx:maximum},
+    ws:{av:wind,mn:Math.max(1,wind-3),mx:wind+6},
+    pre:{av:pressure,mn:pressure-12,mx:pressure+12},
+    wd:windRose,
+    modeled:true
+  };
+}
+function renderWeather(sols){
+  S.wx=sols;
+  const lat=sols[sols.length-1];
+  const t=lat.at?.av??null,w=lat.ws?.av??null,p=lat.pre?.av??null;
+  if(t!==null){document.getElementById('tbtemp').textContent=t.toFixed(1)+' °C';document.getElementById('wtmp').textContent=t.toFixed(1)+'°C';document.getElementById('wmin').textContent=lat.at.mn?.toFixed(1)+'°C';document.getElementById('wmax').textContent=lat.at.mx?.toFixed(1)+'°C';}
+  if(w!==null){document.getElementById('tbwind').textContent=w.toFixed(1)+' m/s';document.getElementById('wwind').textContent=w.toFixed(1)+' m/s';}
+  if(p!==null)document.getElementById('wpres').textContent=p.toFixed(0)+' Pa';
+  const marsTime=getMarsLocalTime();
+  document.getElementById('wcond').textContent=`Sol ${lat.sol} · ${String(marsTime.hours).padStart(2,'0')}:${String(marsTime.minutes).padStart(2,'0')} local solar time · modeled estimate, not live telemetry`;
+  renderSolHistory(sols); renderWindRose(lat.wd); renderEVA(t,w,p);
+}
+function renderSolHistory(sols){
+  document.getElementById('sh').innerHTML=sols.map(s=>`
+    <div class="sc">
+      <div class="sn">Sol ${s.sol}</div>
+      <div class="sd2"><div class="sl">AVG TEMP</div><div class="sv">${s.at?s.at.av.toFixed(1)+'°C':'—'}</div></div>
+      <div class="sd2"><div class="sl">MIN/MAX</div><div class="sv">${s.at?s.at.mn.toFixed(0)+'/'+s.at.mx.toFixed(0):'—'}</div></div>
+      <div class="sd2"><div class="sl">WIND</div><div class="sv hl">${s.ws?s.ws.av.toFixed(1)+' m/s':'—'}</div></div>
+      <div class="sd2"><div class="sl">PRESSURE</div><div class="sv">${s.pre?s.pre.av.toFixed(0)+' Pa':'—'}</div></div>
+    </div>`).join('');
+}
+function renderWindRose(wd){
+  const cv=document.getElementById('wrc'),cx=cv.getContext('2d'),C=105,dirs=['N','NE','E','SE','S','SW','W','NW'];
+  cx.clearRect(0,0,210,210);
+  [30,55,80].forEach(r=>{cx.beginPath();cx.arc(C,C,r,0,Math.PI*2);cx.strokeStyle='rgba(169,91,61,.16)';cx.lineWidth=1;cx.stroke();});
+  cx.font='600 10px "DM Sans",sans-serif';cx.fillStyle='rgba(91,83,70,.7)';cx.textAlign='center';cx.textBaseline='middle';
+  dirs.forEach((d,i)=>{const a=(i*45-90)*Math.PI/180;cx.fillText(d,C+Math.cos(a)*96,C+Math.sin(a)*96);});
+  const data=wd?Object.entries(wd).map(([d,v])=>({d,ct:v.ct||0})):dirs.map((d,i)=>({d,ct:80+Math.round(35*Math.sin(i+1))}));
+  const mx=Math.max(...data.map(x=>x.ct),1);
+  const dm={N:0,NNE:22.5,NE:45,ENE:67.5,E:90,ESE:112.5,SE:135,SSE:157.5,S:180,SSW:202.5,SW:225,WSW:247.5,W:270,WNW:292.5,NW:315,NNW:337.5};
+  data.forEach(({d,ct})=>{
+    const ad=(dm[d]??0)-90,a=ad*Math.PI/180,len=(ct/mx)*72;
+    if(len<2)return;
+    const g=cx.createLinearGradient(C,C,C+Math.cos(a)*len,C+Math.sin(a)*len);
+    g.addColorStop(0,'rgba(189,104,72,.08)');g.addColorStop(1,'rgba(189,104,72,.72)');
+    cx.beginPath();cx.moveTo(C,C);
+    cx.lineTo(C+Math.cos(a-.15)*len,C+Math.sin(a-.15)*len);
+    cx.lineTo(C+Math.cos(a)*(len+5),C+Math.sin(a)*(len+5));
+    cx.lineTo(C+Math.cos(a+.15)*len,C+Math.sin(a+.15)*len);
+    cx.closePath();cx.fillStyle=g;cx.fill();
+  });
+  cx.beginPath();cx.arc(C,C,5,0,Math.PI*2);cx.fillStyle='#bd6848';cx.fill();
+}
+function renderEVA(t,w,p){
+  const its=[
+    {cls:'warn',txt:`Modeled temperature: ${t!==null?t.toFixed(1)+'°C':'—'} — thermal protection required`},
+    {cls:w!==null&&w<15?'safe':'warn',txt:`Modeled wind: ${w!==null?w.toFixed(1)+' m/s':'—'} — monitor dust and visibility`},
+    {cls:'dng',txt:`Modeled surface pressure: ${p!==null?p.toFixed(0)+' Pa':'—'} — unpressurized exposure is unsafe`},
+    {cls:'warn',txt:'Radiation: not modeled — use mission dosimeter readings'},
+    {cls:'warn',txt:'UV: not modeled — use surface shielding'},
+  ];
+  document.getElementById('eva').innerHTML=its.map(i=>`<div class="ei ${i.cls}"><span class="eds"></span><span>${i.txt}</span></div>`).join('');
+}
+
+// ========== MISSION PLANNER ==========
+function setupMission(){
+  const active=ROVER_MISSIONS.filter(rover=>rover.status==='Active').length;
+  document.getElementById('active-rovers').textContent=active;
+  document.getElementById('past-rovers').textContent=ROVER_MISSIONS.length-active;
+  document.getElementById('mission-fleet').innerHTML=ROVER_MISSIONS.map(rover=>`
+    <article class="rc">
+      <div class="rch" style="border-left:4px solid ${rover.color}">
+        <div class="rci">${rover.icon}</div>
+        <div><div class="rcn">${rover.name}</div><div class="rcl">${rover.site}</div></div>
+        <span class="rcs2 ${rover.status==='Active'?'act':'con'}">${rover.status.toUpperCase()}</span>
+      </div>
+      <div class="mission-facts"><strong>Mission:</strong> ${rover.mission}<br><strong>Launch:</strong> ${rover.launch}<br><strong>Landing:</strong> ${rover.landing}<br><strong>${rover.status==='Active'?'Status':'Mission length'}:</strong> ${rover.status==='Active'?'Ongoing':rover.duration}<br><strong>${rover.status==='Active'?'Focus':'Distance' }:</strong> ${rover.status==='Active'?rover.objective:rover.distance}<br><a class="mission-source" href="${rover.source}" target="_blank" rel="noopener noreferrer">NASA mission details ↗</a></div>
+      <p class="mission-summary">${rover.summary}</p>
+      <button class="rcbtn" type="button" onclick="browseRover('${rover.id}')">Browse NASA photos</button>
+    </article>`).join('');
+  document.getElementById('btn-route-export').disabled=S.wps.length===0;
+}
+
+function browseRover(roverId){
+  if(!ROVER_MISSIONS.some(rover=>rover.id===roverId))return;
+  document.getElementById('rov').value=roverId;
+  document.querySelector('.nb[data-p="gallery"]').click();
+  fetchPhotos();
+}
+
+// ========== GALLERY ==========
+function setupGallery(){
+  document.getElementById('btn-fetch').addEventListener('click',fetchPhotos);
+  document.getElementById('btn-more').addEventListener('click',loadMorePhotos);
+  document.getElementById('pg').addEventListener('click',event=>{
+    const card=event.target.closest('.pc');
+    if(card)openPhoto(Number(card.dataset.photoIndex));
+  });
+}
+async function fetchPhotos(){
+  const roverId=document.getElementById('rov').value;
+  S.gallery={rover:roverId,page:0,total:0,images:[],loading:false,request:S.gallery.request+1};
+  document.getElementById('btn-more').disabled=true;
+  document.getElementById('pg').innerHTML='<div class="gph"><div class="spin"></div><div class="gph-t">Searching NASA’s rover archive…</div></div>';
+  document.getElementById('btn-fetch').disabled=true;
+  try{
+    await loadGalleryPage(1,S.gallery.request);
+  }catch(error){
+    showGalleryError(error);
+  }finally{
+    document.getElementById('btn-fetch').disabled=false;
+  }
+}
+async function loadMorePhotos(){
+  if(S.gallery.loading||!S.gallery.rover)return;
+  const request=S.gallery.request;
+  document.getElementById('btn-more').disabled=true;
+  try{
+    await loadGalleryPage(S.gallery.page+1,request);
+  }catch(error){
+    showGalleryError(error);
+  }
+}
+async function loadGalleryPage(page,request){
+  const rover=ROVER_MISSIONS.find(item=>item.id===S.gallery.rover);
+  if(!rover)throw new Error('Choose a rover mission to browse its photos.');
+  S.gallery.loading=true;
+  const url=new URL(NASA_IMAGES);
+  url.searchParams.set('q',rover.query);
+  url.searchParams.set('media_type','image');
+  url.searchParams.set('page_size','100');
+  url.searchParams.set('page',String(page));
+  try{
+    const response=await fetch(url);
+    if(!response.ok)throw new Error(`NASA image archive returned ${response.status}. Please try again.`);
+    const result=await response.json();
+    if(request!==S.gallery.request)return;
+    const items=(result.collection?.items||[]).map(item=>normalizeRoverImage(item)).filter(Boolean);
+    const seen=new Set(S.gallery.images.map(image=>image.id));
+    S.gallery.images.push(...items.filter(image=>!seen.has(image.id)&&seen.add(image.id)));
+    S.gallery.page=page;
+    S.gallery.total=result.collection?.metadata?.total_hits||0;
+  }finally{
+    if(request===S.gallery.request){
+      S.gallery.loading=false;
+      renderGrid();
+    }
+  }
+}
+function normalizeRoverImage(item){
+  const details=item.data?.[0];
+  const preview=item.links?.find(link=>link.rel==='preview')?.href;
+  if(!details?.title||!preview)return null;
+  const text=`${details.title} ${details.description||''}`;
+  const unsuitableTitle=/artist.?s? concept|illustration|mock.?up|diagram|infographic|animation|simulation|prototype|clean.?room|laboratory|launch pad|launch vehicle|spacecraft|aeroshell|parachute|descent stage|airbag|assembly|engineering model|mars.?yard|press conference|news conference|briefing|commemorat|illuminated|terminal tower|calibration|testbed|\bfiction(?:al)?\b|the martian/i;
+  const unsuitableDescription=/artist.?s? concept|illustration|mock.?up|\banimation\b|\bsimulation\b|mars.?yard|clean.?room|laboratory|launch pad|press conference|news conference|briefing|\bfiction(?:al)?\b|the martian/i;
+  const hardwareOnly=/\b(rover wheels?|wheel assembly|robotic arm|heat shield|drill bit|instrument deck|spacecraft bus|solar panels?|remote sensing mast|mast head)\b/i;
+  const mapOrDiagram=/\b(map|locator|layout|diagram|model|illustration)\b/i;
+  const surfaceScene=/\b(surface|landscape|panorama|crater|dune|rock|soil|ground|terrain|view|dust|valley|delta|horizon|canyon|outcrop|sand|slope|bedrock|mountain|ridge|scarp|plain|deposit|layer|track|sol\s*\d+)\b/i;
+  if(unsuitableTitle.test(details.title)||unsuitableDescription.test(details.description||'')||hardwareOnly.test(details.title)||mapOrDiagram.test(details.title)||!surfaceScene.test(text))return null;
+  if(!matchesRoverMission(details.title,text,S.gallery.rover))return null;
+  const previewURL=toNasaImageURL(preview);
+  if(!previewURL)return null;
+  const original=previewURL.replace('~thumb','~orig');
+  const id=previewURL.match(/\/image\/([^/]+)/)?.[1]||previewURL;
+  return{
+    id,title:details.title,rover:ROVER_MISSIONS.find(item=>item.id===S.gallery.rover).name,
+    preview:previewURL,original,date:details.date_created?.slice(0,10)||'NASA archive'
+  };
+}
+function matchesRoverMission(title,text,roverId){
+  if(roverId==='perseverance'&&/\bperseverance valley\b/i.test(title))return false;
+  const missionTerms={
+    curiosity:/\b(curiosity|gale crater|mount sharp|naukluft plateau|murray buttes|windjana)\b/i,
+    perseverance:/\b(perseverance|jezero|mastcam.?z|rio chiquito|pico turquino|santa cruz)\b/i,
+    opportunity:/\b(opportunity|meridiani|marathon valley|rocheport|endeavour crater|perseverance valley|tribulation)\b/i,
+    spirit:/\b(spirit|gusev|columbia hills|home plate|von braun|bonneville|bonestell)\b/i,
+    sojourner:/\b(sojourner|pathfinder|ares vallis|chryse planitia)\b/i
+  };
+  const subject=roverId==='sojourner'?text:title;
+  return Boolean(missionTerms[roverId]?.test(subject));
+}
+function toNasaImageURL(value){
+  try{
+    const url=new URL(value);
+    if(url.protocol!=='https:'||(url.hostname!=='nasa.gov'&&!url.hostname.endsWith('.nasa.gov')))return null;
+    return url.href;
+  }catch{return null;}
+}
+function renderGrid(){
+  const rover=ROVER_MISSIONS.find(item=>item.id===S.gallery.rover);
+  document.getElementById('gmr').textContent=`${rover.name} · NASA ARCHIVE`;
+  document.getElementById('gms').textContent=`${S.gallery.images.length} loaded · ${new Date().toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})}`;
+  document.getElementById('gmc').textContent=S.gallery.images.length.toLocaleString();
+  const gallery=document.getElementById('pg');
+  if(!S.gallery.images.length){
+    gallery.innerHTML='<div class="gph"><div class="gph-ic">🔭</div><div class="gph-t">No matching surface photos on this archive page.</div><div class="gph-s">Load more photos to continue through the NASA archive.</div></div>';
+  }else{
+    gallery.innerHTML=S.gallery.images.map((image,index)=>`
+      <button class="pc" type="button" data-photo-index="${index}" aria-label="View ${escapeHTML(image.title)}">
+        <img src="${escapeHTML(image.preview)}" loading="lazy" alt="${escapeHTML(image.title)}" onerror="this.closest('.pc').classList.add('image-error')"/>
+        <span class="po"><span class="po-cam">${escapeHTML(rover.name)} · NASA</span><span class="po-sol">${escapeHTML(image.title)} · ${escapeHTML(image.date)}</span></span>
+      </button>`).join('');
+  }
+  document.getElementById('btn-more').disabled=S.gallery.loading||S.gallery.page*100>=S.gallery.total;
+}
+function showGalleryError(error){
+  console.error('NASA rover image search failed:',error);
+  const message=error instanceof Error?error.message:'NASA image archive is temporarily unavailable.';
+  document.getElementById('gms').textContent='Archive unavailable';
+  document.getElementById('pg').innerHTML=`<div class="gph"><div class="gph-ic">⚠️</div><div class="gph-t">${escapeHTML(message)}</div><div class="gph-s">Check your connection and try again.</div></div>`;
+}
+
+// ========== LIGHTBOX ==========
+function setupLightbox(){
+  document.getElementById('lbx-cl').addEventListener('click',closeLbx);
+  document.getElementById('lbx').addEventListener('click',e=>{if(e.target===e.currentTarget)closeLbx();});
+  document.addEventListener('keydown',e=>{if(e.key==='Escape')closeLbx();});
+}
+function openPhoto(index){
+  const image=S.gallery.images[index];
+  if(image)openLbx(image);
+}
+function openLbx(image){
+  const photo=document.getElementById('lbx-img');
+  photo.src=image.original;
+  photo.alt=image.title;
+  photo.onerror=()=>{
+    photo.onerror=null;
+    if(image.preview&&photo.src!==image.preview)photo.src=image.preview;
+  };
+  const info=document.getElementById('lbx-inf');
+  info.textContent=`${image.title} · ${image.rover} · ${image.date} · NASA image archive`;
+  const link=document.createElement('a');
+  link.href=image.original;link.target='_blank';link.rel='noopener noreferrer';
+  link.textContent='Open full-resolution NASA image';
+  link.style.display='block';link.style.marginTop='8px';link.style.color='#f1c2a3';
+  info.append(document.createElement('br'),link);
+  document.getElementById('lbx').classList.remove('hidden');
+}
+function openArchiveImage(image){
+  if(image?.src)openLbx({original:image.src,title:image.alt,rover:'Mars image archive',date:image.dataset.date||'NASA archive'});
+}
+function closeLbx(){document.getElementById('lbx').classList.add('hidden');document.getElementById('lbx-img').src='';}
+
+// ========== APOD ==========
+function setupAPOD(){
+  const yearInput=document.getElementById('apdate');
+  yearInput.max=String(new Date().getUTCFullYear());
+  document.getElementById('btn-apod').addEventListener('click',fetchAPOD);
+  document.getElementById('btn-rnd').addEventListener('click',fetchRandAPOD);
+  requestMarsImage({random:true});
+}
+function setImageServiceStatus(status){
+  const state=status==='NASA archive'||status==='Searching'?'warm':'offline';
+  document.getElementById('image-status').textContent=status;
+  document.getElementById('image-status-dot').className=`sd ${state}`;
+}
+function escapeHTML(value){
+  return String(value??'').replace(/[&<>"']/g,char=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
+}
+async function requestMarsImage({random=false}={}){
+  const requestId=++S.imageRequest;
+  const container=document.getElementById('apd');
+  const year=document.getElementById('apdate').value.trim();
+  const currentYear=new Date().getUTCFullYear();
+  if(year&&(!/^\d{4}$/.test(year)||Number(year)<1960||Number(year)>currentYear)){
+    container.innerHTML='<div class="gph"><div class="gph-ic">📅</div><div class="gph-t">Choose a year from 1960 to the present.</div></div>';
+    return;
+  }
+  container.innerHTML='<div style="display:flex;align-items:center;justify-content:center;height:100%"><div class="spin"></div></div>';
+  setImageServiceStatus('Searching');
+  try{
+    const url=new URL(NASA_IMAGES);
+    url.searchParams.set('q','mars landscape');
+    url.searchParams.set('media_type','image');
+    url.searchParams.set('page_size','100');
+    if(year){
+      url.searchParams.set('year_start',year);
+      url.searchParams.set('year_end',year);
+    }
+    const response=await fetch(url);
+    if(!response.ok)throw new Error(`NASA Mars image search failed (${response.status})`);
+    const result=await response.json();
+    const items=(result.collection?.items||[]).filter(item=>{
+      const details=item.data?.[0];
+      const preview=item.links?.find(link=>link.rel==='preview')?.href;
+      const title=details?.title||'';
+      const searchableText=`${title} ${details?.description||''}`;
+      const clearlyMars=/\b(mars|martian|curiosity|perseverance|opportunity|spirit|insight|phoenix|pathfinder)\b/i.test(searchableText);
+      const surfaceImage=/\b(surface|landscape|panorama|crater|dune|rock|soil|ground|terrain|view|dust|valley|delta|horizon|canyon|outcrop|sand|slope|bedrock|mountain|ridge|scarp|plain|frost|ice|deposit|layer)\b/i.test(searchableText);
+      const nonPhoto=/artist.?s? concept|illustration|mock.?up|diagram|infographic|animation|simulation|\bmodel\b|\btest(?:ing)?\b|prototype|development|heat shield|parachute|descent stage|spacecraft|aeroshell|vacuum chamber|mars-like|laboratory|clean.?room|concept art|stack operations|assembly/i.test(searchableText);
+      const hardwareOnly=/\b(hexapod|robotic arm|wheel|drill|instrument|solar panels?|antenna|heat shield|descent stage|spacecraft|aeroshell|parachute|airbags?|launch vehicle|test stand|prototype|component|hardware|interior|exterior)\b/i.test(title);
+      const earthScene=/times square|new york city|billboard|video board|digital display|television screen|news conference|press conference|on earth|mars yard|clean room|launch pad|kennedy space center|cape canaveral/i.test(searchableText);
+      return title&&preview&&clearlyMars&&surfaceImage&&!nonPhoto&&!hardwareOnly&&!earthScene&&(!year||details.date_created?.slice(0,4)===year);
+    });
+    if(requestId!==S.imageRequest)return;
+    if(!items.length){
+      container.innerHTML=`<div class="gph"><div class="gph-ic">🔭</div><div class="gph-t">${year?`No Mars surface images found for ${escapeHTML(year)}.`:'No Mars surface images are available right now.'}</div><div class="gph-s">Try another year or browse the full archive.</div></div>`;
+      setImageServiceStatus('NASA archive');
+      return;
+    }
+    renderMarsImage(items[random?Math.floor(Math.random()*items.length):0]);
+    setImageServiceStatus('NASA archive');
+  }catch(error){
+    if(requestId!==S.imageRequest)return;
+    console.error('NASA Mars image search failed:',error);
+    setImageServiceStatus('Unavailable');
+    container.innerHTML='<div class="gph"><div class="gph-ic">♂</div><div class="gph-t">The Mars image archive is temporarily unavailable.</div><div class="gph-s">Please try again in a moment.</div></div>';
+  }
+}
+function fetchAPOD(){
+  return requestMarsImage({random:!document.getElementById('apdate').value});
+}
+function fetchRandAPOD(){
+  document.getElementById('apdate').value='';
+  return requestMarsImage({random:true});
+}
+function renderMarsImage(item){
+  const details=item.data[0];
+  const previewURL=new URL(item.links.find(link=>link.rel==='preview').href);
+  if(previewURL.protocol==='http:')previewURL.protocol='https:';
+  if(previewURL.protocol!=='https:'||(previewURL.hostname!=='nasa.gov'&&!previewURL.hostname.endsWith('.nasa.gov')))throw new Error('NASA returned an invalid image URL');
+  const preview=previewURL.href;
+  const original=preview.replace('~thumb','~orig');
+  const title=escapeHTML(details.title);
+  const date=escapeHTML(details.date_created?.slice(0,10)||'NASA archive');
+  const description=escapeHTML((details.description||'Image from NASA’s archive of Mars surface exploration.').slice(0,1200));
+  document.getElementById('apd').innerHTML=`
+    <div class="apc2">
+      <div class="apim"><img src="${escapeHTML(original)}" data-preview="${escapeHTML(preview)}" data-date="${date}" alt="${title}" onclick="openArchiveImage(this)" onerror="this.onerror=null;this.src=this.dataset.preview"/></div>
+      <div class="apin">
+        <div class="apdb">♂ &nbsp; MARS · ${date}</div>
+        <div class="aptr">${title}</div>
+        <div class="apcp">NASA Mars exploration archive</div>
+        <div class="apex">${description}</div>
+        <a href="${escapeHTML(original)}" target="_blank" rel="noopener noreferrer" style="display:inline-block;padding:8px 18px;background:rgba(255,107,53,.1);border:1px solid rgba(255,107,53,.28);border-radius:8px;color:#ff6b35;font-size:.75rem;text-decoration:none;margin-top:4px">🖼️ View full image</a>
+      </div>
+    </div>`;
+}
+
+// ========== SCIENCE ==========
+function updateSciProg(){
+  const cbs=document.querySelectorAll('.scc'),n=[...cbs].filter(c=>c.checked).length;
+  document.getElementById('spf').style.width=(n/cbs.length*100)+'%';
+  document.getElementById('spt').textContent=n+'/'+cbs.length;
+}
+document.querySelectorAll('.scc').forEach(c=>c.addEventListener('change',updateSciProg));
+
+// ========== CHARTS ==========
+function renderCharts(){
+  if(!S.wx?.length||!window.Chart)return;
+  const labels=S.wx.map(s=>'Sol '+s.sol);
+  const opts={
+    responsive:true,maintainAspectRatio:false,
+    plugins:{legend:{display:false},tooltip:{backgroundColor:'rgba(255,255,255,.96)',borderColor:'rgba(169,91,61,.2)',borderWidth:1,titleColor:'#70412f',bodyColor:'#48504a',padding:10}},
+    scales:{x:{grid:{color:'rgba(91,83,70,.08)'},ticks:{color:'#778078',font:{family:'DM Sans',size:10}}},
+            y:{grid:{color:'rgba(91,83,70,.08)'},ticks:{color:'#778078',font:{family:'DM Sans',size:10}}}}
+  };
+  const mk=(id,type,data,color,bg)=>{
+    const ctx=document.getElementById(id).getContext('2d');
+    if(window['_ch_'+id])window['_ch_'+id].destroy();
+    window['_ch_'+id]=new Chart(ctx,{type,data:{labels,datasets:[{data,borderColor:color,backgroundColor:bg,borderWidth:2,pointBackgroundColor:color,pointRadius:3,pointHoverRadius:5,fill:true,tension:.35,borderRadius:5}]},options:opts});
+  };
+  mk('tc','line',S.wx.map(s=>s.at?.av??null),'#b85c3d','rgba(184,92,61,.14)');
+  mk('pc2','bar',S.wx.map(s=>s.pre?.av??null),'#658f9b','rgba(101,143,155,.2)');
+  mk('wc2','line',S.wx.map(s=>s.ws?.av??null),'#8b779f','rgba(139,119,159,.14)');
+}
+</script>
+</body>
+</html>
